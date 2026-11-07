@@ -37,6 +37,12 @@ REGISTRY="$CLIENTS_DIR/clients.json"
 BASE_PORT="${BASE_PORT:-3001}"
 NGINX_TEMPLATE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/client-nginx.conf"
 
+# Optional branch override. The deploy tooling currently lives on a feature
+# branch rather than main, so set this when cloning fresh clients:
+#   BRANCH=arena/f58d4212-landingpages bash deploy/add-client.sh add ...
+# Left empty, git clone takes the repo default branch.
+BRANCH="${BRANCH:-}"
+
 log()  { echo -e "$@"; }
 die()  { echo -e "❌ $*" >&2; exit 1; }
 need_root() { [ "$(id -u)" -eq 0 ] || die "Run as root (sudo)."; }
@@ -205,9 +211,31 @@ cmd_add() {
   # ---- 1. App code ----
   if [ ! -f "$appdir/server.js" ]; then
     log "▶ [1/6] Cloning app code..."
-    rm -rf "$appdir"
-    git clone --depth 1 "$repo" "$appdir" >/dev/null 2>&1 \
-      || die "git clone failed from $repo — check the repo URL in $REGISTRY"
+    # Only clear the directory if it is empty or is already our checkout.
+    # Blindly rm -rf'ing could delete something unrelated that happens to
+    # live at that path on a shared box.
+    if [ -e "$appdir" ]; then
+      if [ -d "$appdir/.git" ] && \
+         [ "$(git -C "$appdir" config --get remote.origin.url 2>/dev/null || echo)" = "$repo" ]; then
+        rm -rf "$appdir"
+      elif [ -z "$(ls -A "$appdir" 2>/dev/null)" ]; then
+        rmdir "$appdir" 2>/dev/null || rm -rf "$appdir"
+      else
+        die "$appdir pehle se maujood hai aur na khaali hai, na hamara git checkout.
+   Kuch aur waha rakha hai — dusra slug use karo ya folder khud saaf karo:
+     ls -la $appdir"
+      fi
+    fi
+    # BRANCH is optional; only pass -b when it is actually set, because
+    # `git clone -b ""` fails outright.
+    if [ -n "${BRANCH:-}" ]; then
+      git clone -b "$BRANCH" --depth 1 "$repo" "$appdir" >/dev/null 2>&1 \
+        || git clone --depth 1 "$repo" "$appdir" >/dev/null 2>&1 \
+        || die "git clone failed from $repo — check the repo URL in $REGISTRY"
+    else
+      git clone --depth 1 "$repo" "$appdir" >/dev/null 2>&1 \
+        || die "git clone failed from $repo — check the repo URL in $REGISTRY"
+    fi
   else
     log "▶ [1/6] App code already present, reusing."
   fi

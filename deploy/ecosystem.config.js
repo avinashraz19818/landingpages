@@ -21,7 +21,10 @@ module.exports = {
 
       env: {
         NODE_ENV: 'production',
-        PORT: 3000
+        // Read from the environment so setup-vps.sh / quickstart.sh can place
+        // this app on a free port. Hardcoding 3000 collided with whatever
+        // already occupied that port on a shared box.
+        PORT: process.env.PORT || '3000'
       },
 
       // Auto-restart behaviour

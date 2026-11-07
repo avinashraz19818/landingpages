@@ -94,18 +94,43 @@ fi
 mkdir -p /var/log/$APP_NAME
 
 pm2 delete $APP_NAME >/dev/null 2>&1 || true
-pm2 start deploy/ecosystem.config.js
+# Export PORT so ecosystem.config.js picks it up instead of defaulting to 3000.
+# On a shared box 3000 may already belong to the other running site.
+PORT="$NODE_PORT" NODE_ENV=production pm2 start deploy/ecosystem.config.js
+echo "   ✅ PM2 process '$APP_NAME' started on port $NODE_PORT"
 pm2 save
 # Start PM2 automatically on server reboot
 env PATH=$PATH:/usr/bin pm2 startup systemd -u root --hp /root >/dev/null 2>&1 || true
 pm2 save
 
 # ---------- 5. Firewall ---------------------------------------------
-echo "▶ [5/8] Configuring UFW firewall (22, 80, 443 only)..."
-ufw allow OpenSSH
-ufw allow 'Nginx Full'
-ufw --force enable
-echo "   Node port $NODE_PORT stays private (Nginx proxies to it)."
+echo "▶ [5/8] Firewall..."
+# These two rules are additive and safe regardless of UFW's current state.
+ufw allow OpenSSH      >/dev/null 2>&1 || true
+ufw allow 'Nginx Full' >/dev/null 2>&1 || true
+echo "   ✅ rules added: 22 (SSH), 80/443 (Nginx)"
+
+# Enabling UFW on a server that already hosts something can lock out ports
+# we know nothing about (DB, panel, mail). So only enable it when it is
+# already on, or when the operator explicitly agrees.
+if ufw status 2>/dev/null | grep -qi "Status: active"; then
+  echo "   ✅ UFW pehle se active tha — sirf rules add kiye, kuch block nahi hua."
+else
+  echo "   ⚠ UFW abhi INACTIVE hai."
+  if [ "${ASSUME_YES:-0}" = "1" ]; then
+    echo "     ASSUME_YES=1 set hai, isliye enable nahi kar rahe (safe default)."
+  else
+    echo "     Enable karne se sirf 22/80/443 khule rahenge. Agar is server pe"
+    echo "     koi aur service chal rahi hai (DB, panel, mail, custom port)"
+    echo "     to wo BLOCK ho jaayegi."
+    read -r -p "     UFW enable karna hai? [y/N] " ufw_ans
+    case "${ufw_ans:-N}" in
+      [yY]*) ufw --force enable && echo "   ✅ UFW enabled" ;;
+      *)     echo "   ⏭ UFW inactive chhod diya (existing services safe)." ;;
+    esac
+  fi
+fi
+echo "   Node port $NODE_PORT private rahega (Nginx proxy karta hai)."
 
 # ---------- 6. Nginx -------------------------------------------------
 echo "▶ [6/8] Installing Nginx & writing site config..."
@@ -147,22 +172,63 @@ server {
 EOF
 
 ln -sf /etc/nginx/sites-available/$APP_NAME /etc/nginx/sites-enabled/$APP_NAME
-rm -f /etc/nginx/sites-enabled/default
-nginx -t && systemctl reload nginx
+
+# We deliberately DO NOT remove sites-enabled/default.
+#
+# Our vhost declares an explicit server_name, so requests for $DOMAIN match
+# ours and the default site only catches requests that match nothing. Deleting
+# it buys us a slightly tidier "hit the raw IP" page, but on a box that already
+# hosts another site it can take that site down outright. Not worth it.
+if [ -e /etc/nginx/sites-enabled/default ]; then
+  echo "   ℹ sites-enabled/default maujood hai — chheda NAHI gaya."
+  echo "     Hamara vhost explicit server_name ($DOMAIN) use karta hai, isliye"
+  echo "     existing site pe koi asar nahi padega."
+fi
+
+# Validate BEFORE reloading. If nginx -t fails we must not reload, because a
+# failed reload on a shared box can take the other site down with it.
+if nginx -t; then
+  systemctl reload nginx
+  echo "   ✅ Nginx vhost live (reload successful)"
+else
+  echo "   🔴 nginx -t FAIL hua — reload NAHI kiya, existing site safe hai."
+  echo "      Error upar dikha hai. Hamara vhost: /etc/nginx/sites-available/$APP_NAME"
+  exit 1
+fi
 
 # ---------- 7. SSL certificate ---------------------------------------
 echo "▶ [7/8] Issuing Let's Encrypt SSL certificate..."
-apt-get install -y certbot python3-certbot-nginx
+apt-get install -y certbot python3-certbot-nginx >/dev/null 2>&1
 
-if certbot --nginx -d "$DOMAIN" -d "www.$DOMAIN" \
+# Use certonly + webroot, NOT `certbot --nginx`.
+#
+# `certbot --nginx` rewrites Nginx config files to inject ssl_certificate
+# lines and (with --redirect) a 301 block. On a box that already serves
+# another site that rewrite can disturb the neighbouring vhost. `certonly`
+# only obtains the certificate and touches nothing else — then we write our
+# own vhost with the cert paths in step 8.
+CERT_ARGS=(-d "$DOMAIN")
+# www only makes sense for an apex domain; for a subdomain like
+# ree.example.com, www.ree.example.com would just fail the challenge.
+DOTS="$(echo "$DOMAIN" | tr -cd '.' | wc -c)"
+[ "$DOTS" -eq 1 ] && CERT_ARGS+=(-d "www.$DOMAIN")
+
+if certbot certonly --webroot -w /var/www/certbot "${CERT_ARGS[@]}" \
      --non-interactive --agree-tos --register-unsafely-without-email \
-     --redirect; then
+     --keep-until-expiring; then
   SSL_OK=1
-  echo "   ✅ SSL installed for $DOMAIN"
+  echo "   ✅ SSL certificate issued for: ${CERT_ARGS[*]}"
+  echo "      /etc/letsencrypt/live/$DOMAIN/"
 else
   SSL_OK=0
-  echo "   ⚠ SSL failed. Usually DNS has not propagated yet."
-  echo "     Fix DNS then re-run:  certbot --nginx -d $DOMAIN -d www.$DOMAIN"
+  echo "   ⚠ SSL issue nahi hua. Aam taur pe DNS abhi propagate nahi hua hota."
+  echo "     Existing site pe koi asar NAHI pada — sirf hamara cert pending hai."
+  echo ""
+  echo "     DNS theek karke ye dobara chalao:"
+  echo "       certbot certonly --webroot -w /var/www/certbot ${CERT_ARGS[*]}"
+  echo ""
+  echo "     💡 Agar Cloudflare proxy (orange cloud) ON hai to use DNS-only (grey)"
+  echo "        karo, ya DNS-01 wildcard use karo: bash deploy/wildcard-cert.sh $DOMAIN <email>"
 fi
 
 # ---------- 8. Full Nginx config (SSE + uploads tuned) ---------------
