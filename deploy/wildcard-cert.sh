@@ -71,9 +71,26 @@ echo "   ✅ dns-cloudflare plugin ready"
 
 # ---------- 2. Store the API token securely --------------------------
 echo "▶ [2/5] Configuring Cloudflare credentials..."
-if [ -z "$TOKEN" ] && [ -f "$INI_FILE" ]; then
-  echo "   $INI_FILE already exists — reusing stored token."
-elif [ -z "$TOKEN" ]; then
+
+# Verify a token against Cloudflare before we build anything on it. Without
+# this, a bad token surfaces much later as certbot's cryptic "error 99998 /
+# unable to determine zone_id", and re-running silently reuses the same broken
+# token from the ini file — so the operator loops forever.
+verify_token() {
+  [ -n "$1" ] || return 1
+  curl -fsS --max-time 15 \
+    -H "Authorization: Bearer $1" \
+    https://api.cloudflare.com/client/v4/user/tokens/verify 2>/dev/null \
+    | grep -q '"status"[[:space:]]*:[[:space:]]*"active"'
+}
+
+read_stored_token() {
+  [ -f "$INI_FILE" ] || return 1
+  grep -m1 'dns_cloudflare_api_token' "$INI_FILE" 2>/dev/null \
+    | sed 's/^[^=]*=[[:space:]]*//' | tr -d '[:space:]' | grep -v '^$'
+}
+
+prompt_token() {
   echo ""
   echo "   Cloudflare API token chahiye. Banane ka tareeqa:"
   echo "     dash.cloudflare.com → My Profile → API Tokens → Create Token"
@@ -82,22 +99,52 @@ elif [ -z "$TOKEN" ]; then
   echo ""
   read -r -s -p "   Paste API token (input hidden): " TOKEN
   echo ""
-  [ -n "$TOKEN" ] || die "Token khaali hai."
+}
+
+# Prefer --token / env, else reuse the stored one, else prompt.
+if [ -z "$TOKEN" ]; then
+  STORED="$(read_stored_token || true)"
+  if [ -n "$STORED" ]; then
+    if verify_token "$STORED"; then
+      TOKEN="$STORED"
+      echo "   ✅ stored token reuse kiya aur verify ho gaya (active)."
+    else
+      echo "   ⚠ $INI_FILE me stored token INVALID ya expire hai."
+      echo "     Cloudflare ne use reject kiya — naya token maang rahe hain."
+      rm -f "$INI_FILE"
+    fi
+  fi
 fi
 
-if [ ! -f "$INI_FILE" ] || ! grep -q "dns_cloudflare_api_token" "$INI_FILE" 2>/dev/null; then
-  mkdir -p /etc/letsencrypt
-  umask 077
-  cat > "$INI_FILE" <<EOF
+[ -n "$TOKEN" ] || prompt_token
+[ -n "$TOKEN" ] || die "Token khaali hai."
+
+if ! verify_token "$TOKEN"; then
+  die "Cloudflare ne ye token REJECT kar diya (verify endpoint se 'active' nahi mila).
+
+   Ye check karo:
+   • Token 'API Token' hai, 'Global API Key' NAHI (Global key is plugin me kaam nahi karta)
+   • Permission = Zone → DNS → Edit   (Account permissions nahi)
+   • Zone Resources = Include → Specific zone → $DOMAIN
+     (ya 'All zones' — lekin dusri zone pe restrict nahi)
+   • Token pura copy hua hai, aage-peeche space nahi
+   • Token us Cloudflare ACCOUNT ka hai jisme $DOMAIN add hai
+
+   Test karne ke liye:
+     curl -s -H \"Authorization: Bearer TOKEN\" \\
+       https://api.cloudflare.com/client/v4/user/tokens/verify"
+fi
+echo "   ✅ token verify ho gaya — Cloudflare ne 'active' kaha."
+
+mkdir -p /etc/letsencrypt
+umask 077
+cat > "$INI_FILE" <<EOF
 # Cloudflare API credentials for certbot DNS-01 challenges.
 # Permission needed: Zone -> DNS -> Edit (for $DOMAIN only).
 dns_cloudflare_api_token = $TOKEN
 EOF
-  chmod 600 "$INI_FILE"
-  echo "   ✅ token stored in $INI_FILE (chmod 600)"
-else
-  echo "   ✅ existing token file kept"
-fi
+chmod 600 "$INI_FILE"
+echo "   ✅ token stored in $INI_FILE (chmod 600)"
 
 # ---------- 3. Verify DNS actually resolves to this machine ----------
 echo "▶ [3/5] Sanity-checking DNS..."
