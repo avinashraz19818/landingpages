@@ -54,6 +54,24 @@ Admin Dashboard par aapko milta hai:
 
 ---
 
+## 🌐 Live Deploy Karna Hai? (VPS / cPanel)
+
+**Is app ko VPS pe deploy karo — cPanel shared hosting par ye theek se nahi chalega** (Telegram webhook, realtime SSE dashboard aur `data.json` writes ke liye ek 24×7 chalne wala process chahiye, jo cPanel ka Passenger provide nahi karta).
+
+Poori guide, reasons aur ready-made config files (PM2 + Nginx + SSL + one-shot setup script) ke liye dekho:
+
+👉 **[DEPLOYMENT.md](./DEPLOYMENT.md)** — `deploy/` folder me `setup-vps.sh`, `nginx.conf`, `ecosystem.config.js`
+
+```bash
+# VPS par ek hi command me pura setup:
+git clone https://github.com/avinashraz19818/landingpages.git /opt/app
+cd /opt/app && bash deploy/setup-vps.sh yourdomain.com
+```
+
+> 🔴 **Zaroori:** live karne se pehle `DEPLOYMENT.md` ka **section 6** padho — admin APIs par abhi koi authentication nahi hai, jisse aapka Telegram bot token aur Meta CAPI token public internet pe leak ho sakta hai.
+
+---
+
 ## 🛠️ Kaise Start Karein (Quick Start)
 
 ### 1. Server Start Karein:
