@@ -1,0 +1,31 @@
+{
+  "_comment": [
+    "Client registry for the multi-client (agency) setup.",
+    "add-client.sh reads and writes this file — you normally do not edit it by hand.",
+    "",
+    "slug   : short id, lowercase, no spaces. Used for folder + PM2 name (zfc-<slug>).",
+    "domain : the public domain that runs in Meta ads for THIS client.",
+    "port   : internal Node port. Nginx proxies domain -> 127.0.0.1:port.",
+    "label  : human-readable client name, shown by --list.",
+    "",
+    "One entry = one fully isolated app instance with its own data.json,",
+    "own Telegram bot token, own Meta pixel. Nothing is shared between clients."
+  ],
+
+  "repo": "https://github.com/avinashraz19818/landingpages.git",
+  "clientsDir": "/opt/zfc-clients",
+  "basePort": 3001,
+
+  "clients": [
+    {
+      "slug": "ree",
+      "label": "Sureshot By Ree",
+      "domain": "sureshotree.com",
+      "aliases": ["www.sureshotree.com"],
+      "port": 3001,
+      "telegramChannel": "@sureshotree",
+      "createdAt": "",
+      "notes": "Example entry — delete or overwrite with your real first client."
+    }
+  ]
+}

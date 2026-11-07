@@ -158,37 +158,129 @@ crontab -e
 
 ---
 
-## 6. ⚠️ Deploy se PEHLE 3 cheezein fix karo
+## 6. ✅ Security — 3 critical issues jo fix kar diye gaye hain
 
-Maine repo test karte waqt ye issues paaye. **Public internet pe jaane se pehle inhe theek karna zaroori hai**, warna real nuksaan ho sakta hai:
+Deploy karne se pehle maine repo ko live test kiya aur 3 serious security holes mile.
+**Teeno ab fix ho chuke hain** (commit `375adc2`). Neeche detail hai ki kya badla aur
+aapko deploy ke waqt kya karna hai.
 
-### 🔴 Issue 1 — Admin API par koi authentication nahi hai (CRITICAL)
-`db.js` me `adminPassword: 'admin'` define hai, lekin `server.js` me **kahin use nahi hota**. Maine live test karke confirm kiya:
+### 🔴 Issue 1 — Admin API par koi authentication nahi thi → **FIXED**
+
+Pehle `db.js` me `adminPassword` define tha lekin `server.js` me **kahin use nahi hota tha**.
+Maine live test karke confirm kiya tha:
 
 ```bash
 curl https://yourdomain.com/api/admin/settings
-# → pura settings JSON, jisme telegramBotToken aur metaCapiToken PLAINTEXT me hain
+# → pura settings JSON, jisme telegramBotToken aur metaCapiToken PLAINTEXT me the
 ```
 
-Matlab internet pe **koi bhi insaan** aapka:
-- Telegram bot token chura sakta hai (→ aapka channel takeover)
-- Meta CAPI access token chura sakta hai (→ aapke pixel pe fake events bhej sakta hai, ad account ban risk)
-- `/api/admin/clear-data` se **pura lead history delete** kar sakta hai
-- `/api/admin/settings` se landing page content badal sakta hai
+Matlab internet pe **koi bhi insaan** aapka Telegram bot token chura sakta tha (channel takeover),
+Meta CAPI token chura sakta tha (pixel pe fake events → ad account ban), `/api/admin/clear-data`
+se pura lead history delete kar sakta tha, aur landing page content badal sakta tha.
 
-**Fix chahiye:** `/api/admin/*` routes pe password/session middleware + settings response se secret fields mask karna. *(Bolo to main implement kar deta hoon.)*
+**Ab kya hai:**
+- Naya `services/auth.js` — scrypt password hashing (per-install salt), stateless HMAC-signed
+  session tokens, `httpOnly` + `SameSite=Strict` cookie, aur brute-force guard
+  (8 galat attempts ke baad 10 minute ka lockout per IP).
+- `app.use('/api/admin', ...)` gate har admin route se **pehle** registered hai, isliye pura
+  dashboard API surface default se locked hai.
+- Cookie-based auth (header-based nahi) kyunki dashboard ka realtime feed `EventSource` use
+  karta hai jo custom headers set nahi kar sakta.
+- Naye endpoints: `login`, `logout`, `status`, `change-password` (session secret rotate karta
+  hai, isliye saare purane sessions turant mar jaate hain), `rotate-webhook-secret`.
+- `admin.html` me login overlay + `admin.js` me auth gate — koi bhi call 401 aane par UI
+  wapas login screen pe chala jaata hai.
+- `GET /api/admin/settings` ab secrets ko **strip** karke sirf masked last-4 preview deta hai.
+  SSE ka `SETTINGS_UPDATED` broadcast bhi wahi leak kar raha tha — ab sanitized hai.
+- `POST /api/admin/settings` me khali credential field ka matlab hai "jo saved hai wahi rehne do".
+- Shipped plaintext default password pehli successful login par automatically scrypt hash me
+  upgrade ho jaata hai.
 
-### 🟠 Issue 2 — `data.json` git me tracked hai
-Live data (events, sessions, bot tokens) `data.json` me save hota hai, aur ye file **git me commit hai**. Isse:
-- `git pull` karne par live data overwrite/conflict ho sakta hai
-- Galti se `git push` kar diya to **bot token public GitHub pe leak** ho jayega
+**👉 Aapko kya karna hai:** deploy ke baad `/admin` kholo aur **default password `admin`
+turant badlo**. Login screen khud ye warning dikhayegi jab tak default password set hai.
 
-**Fix:** `data.json` ko `.gitignore` me daalo, aur ek clean `data.json.example` commit karo.
+### 🟠 Issue 2 — `data.json` git me tracked tha → **FIXED**
 
-### 🟡 Issue 3 — Telegram webhook par koi secret verification nahi
-`/api/telegram-webhook` har POST accept kar leta hai. Koi bhi fake `chat_join_request` bhej kar aapke Meta pixel pe **jhoothe Lead events** fire karwa sakta hai — jo is app ka pura maqsad hi kharab kar deta hai.
+Live data (events, sessions, aur saare tokens) `data.json` me save hota hai aur ye file
+git me commit thi. Isse `git pull` par live analytics clobber ho sakti thi, aur galti se
+`git push` karne par **bot token public GitHub pe leak** ho jaata.
 
-**Fix:** Telegram ke `setWebhook` me `secret_token` set karo, aur incoming request ka `X-Telegram-Bot-Api-Secret-Token` header verify karo. *(Ye bhi main kar sakta hoon.)*
+**Ab kya hai:** `data.json` ko `.gitignore` me daal diya gaya hai aur git index se hata diya
+gaya hai. Uski jagah ek clean `data.json.example` commit hai (koi live data nahi, koi secret
+nahi), jise `setup-vps.sh` fresh clone par seed kar deta hai. Uploaded avatars bhi ignore hain.
+
+> **Multi-client setup ke liye ye fix critical tha** — iske bina har client ka token git me
+> chala jaata. Ab `add-client.sh update --all` se code update karne par kisi ka live data
+> touch nahi hota.
+
+### 🟡 Issue 3 — Telegram webhook par koi verification nahi thi → **FIXED**
+
+`/api/telegram-webhook` har POST accept kar leta tha. Koi bhi fake `chat_join_request` bhej
+kar aapke Meta pixel pe **jhoothe Lead events** fire karwa sakta tha — jo is pure system ka
+maqsad hi kharab kar deta hai.
+
+**Ab kya hai:** har install ke liye ek `telegramWebhookSecret` pehli boot par auto-generate
+hota hai. `setWebhook` ise Telegram ke `secret_token` ke roop me bhejta hai, aur handler
+har request ka `X-Telegram-Bot-Api-Secret-Token` header constant-time compare se verify
+karta hai. Match na hone par **403**.
+
+**👉 Aapko kya karna hai:** deploy ke baad dashboard me **"Set Webhook" dobara dabana
+zaroori hai**, tabhi Telegram ko secret pata chalega. Iske bina webhook reject hone lagega.
+Confirm karne ke liye:
+
+```bash
+curl https://api.telegram.org/bot<TOKEN>/getWebhookInfo
+# "url" sahi hona chahiye, "last_error_message" khali hona chahiye
+```
+
+### 🟢 Verified — ye tests live server pe chalaye gaye
+
+| Test | Result |
+|---|---|
+| Session ke bina `/api/admin/settings` | ✅ HTTP 401 |
+| Galat password se login | ✅ HTTP 401 + attempt counter |
+| Sahi password se login | ✅ HTTP 200 + `httpOnly` cookie |
+| Response me plaintext token | ✅ nahi mila, sirf masked `••••••••tXYZ` |
+| `/api/page-config` me secret fields | ✅ bilkul nahi hain |
+| Forged webhook (galat secret) | ✅ HTTP 403 |
+| Forged webhook (secret hi nahi) | ✅ HTTP 403 |
+| Sahi secret wala webhook | ✅ HTTP 200 |
+| Public landing page + `/api/generate-link` | ✅ HTTP 200 (khule hain, jaise hone chahiye) |
+| Default password ka hash upgrade | ✅ `scrypt$...` me badal gaya |
+
+### 🔒 Deploy ke baad ye hardening bhi karo
+
+1. **Admin panel ko IP-restrict karo** — Nginx me `location /admin { allow YOUR_IP; deny all; }`.
+   Isse brute-force ka raasta hi band ho jaata hai. *(Multi-client setup me ye aur bhi zaroori hai.)*
+2. **Root SSH band karo** — `/etc/ssh/sshd_config` me `PasswordAuthentication no` aur
+   `PermitRootLogin prohibit-password`, phir key-based login.
+3. **Daily backup cron lagao** — `data.json` hi aapka pura lead database hai (section 5 dekho).
+4. **Har client ka password alag rakho** — multi-client chala rahe ho to ek password sab jagah
+   reuse mat karo.
+
+---
+
+## 6b. 🏢 Multiple clients chalane hain?
+
+Ye app **single-tenant** hai (ek `data.json`, ek global settings object, koi hostname-based
+tenant routing nahi). Aur ek Telegram bot sirf **ek** webhook URL set kar sakta hai — isliye
+har client ka apna alag bot zaroori hai hi.
+
+Iska sahi solution: **ek hi VPS par N isolated instances** — har client ka apna folder, port,
+`data.json`, domain aur SSL certificate.
+
+👉 **[MULTI-CLIENT.md](./MULTI-CLIENT.md)** — kaun sa domain/TLD kharido (aur kaun sa bilkul
+nahi), VPS sizing, cost breakdown, `add-client.sh` ka pura use, aur onboarding checklist.
+
+```bash
+# Naya client — pura provisioning ek command me (app + PM2 + Nginx + SSL):
+bash deploy/add-client.sh add ree sureshotree.com --label "Sureshot By Ree"
+
+# Saare clients
+bash deploy/add-client.sh list
+bash deploy/add-client.sh update --all
+bash deploy/add-client.sh backup --all
+```
 
 ---
 
@@ -209,8 +301,24 @@ Lekin in sabme bhi **file-based `data.json` problem** rahegi (ephemeral filesyst
 
 ## ✅ Final Recommendation
 
+### Ek client ke liye
 **VPS (Ubuntu 22.04/24.04, 1 GB RAM) + PM2 + Nginx + Let's Encrypt SSL.**
 
 cPanel ko sirf tab use karo jab aapke paas **koi dusra static website** project ho — is Node app ke liye nahi.
 
-Aur haan — **live karne se pehle upar ke 3 security fixes zaroor karwao**, khaas kar Issue 1. Warna aapke Telegram bot aur Meta ad account dono khatre me pad jayenge.
+### Multiple clients ke liye
+**Ek 2 GB VPS + `deploy/add-client.sh`** — har client ka apna isolated instance, apna domain, apna SSL.
+
+Domain strategy: **har client ke liye alag `.com` ya `.in`** (Cloudflare Registrar se, at-cost).
+Ek root domain pe saare clients ko subdomain me mat rakhna — Meta ka domain verification
+`eTLD+1` level pe hota hai, isliye ek client ka policy violation pura root domain flag kar
+sakta hai aur **saare clients ke ads band** ho sakte hain. Saste `.xyz`/`.top`/`.icu` TLD
+bilkul mat lena — Meta unhe trust nahi karta.
+
+👉 Poori detail: **[MULTI-CLIENT.md](./MULTI-CLIENT.md)**
+
+### Security
+Teeno critical issues **ab fix ho chuke hain** (section 6). Deploy ke baad sirf ye karna hai:
+1. Default password `admin` badlo
+2. **"Set Webhook" dobara dabao** (naya webhook secret Telegram tak pahunchana zaroori hai)
+3. Nginx me `/admin` ko apne IP tak restrict karo

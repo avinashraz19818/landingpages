@@ -68,7 +68,25 @@ git clone https://github.com/avinashraz19818/landingpages.git /opt/app
 cd /opt/app && bash deploy/setup-vps.sh yourdomain.com
 ```
 
-> 🔴 **Zaroori:** live karne se pehle `DEPLOYMENT.md` ka **section 6** padho — admin APIs par abhi koi authentication nahi hai, jisse aapka Telegram bot token aur Meta CAPI token public internet pe leak ho sakta hai.
+## 🏢 Multiple Clients Ke Liye Chalna Hai? (Agency Setup)
+
+Ye app **single-tenant** hai — ek install me ek hi Telegram bot + ek hi Meta pixel chalta hai. Ek Telegram bot sirf **ek webhook URL** set kar sakta hai, isliye har client ka apna alag bot zaroori hai.
+
+Iska solution: **ek VPS par N isolated instances** — har client ka apna folder, port, `data.json`, domain aur SSL. Ek client ka kuch bigda to baaki par zero asar.
+
+👉 **[MULTI-CLIENT.md](./MULTI-CLIENT.md)** — domain strategy (kaun sa TLD lena hai, kaun sa nahi), VPS sizing, cost breakdown aur onboarding checklist
+
+```bash
+# Naya client add karo — pura provisioning automatic (app + PM2 + Nginx + SSL):
+bash deploy/add-client.sh add ree sureshotree.com --label "Sureshot By Ree"
+
+# Saare clients ka status / update / backup:
+bash deploy/add-client.sh list
+bash deploy/add-client.sh update --all
+bash deploy/add-client.sh backup --all
+```
+
+> 💡 **Domain:** har client ke liye **alag `.com` ya `.in`** lo. Saste `.xyz`/`.top`/`.icu` TLD mat lena — Meta unhe trust nahi karta aur ad rejection rate high hota hai. Ek root domain pe saare clients subdomain me mat rakhna — ek policy violation se pura domain flag ho jaata hai.
 
 ---
 
