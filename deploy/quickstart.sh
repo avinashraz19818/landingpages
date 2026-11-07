@@ -264,12 +264,80 @@ LOCAL_PORT="${LOCAL_PORT:-3000}"
 PM2_ONLINE="$(pm2 jlist 2>/dev/null | grep -o '"status":"online"' | wc -l)"
 PM2_ONLINE="${PM2_ONLINE:-0}"
 
-printf "   %-34s %s\n" "PM2 processes online:" "$PM2_ONLINE"
-printf "   %-34s %s\n" "Node on 127.0.0.1:$LOCAL_PORT" "$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "http://127.0.0.1:$LOCAL_PORT/" 2>/dev/null || echo 'DOWN')"
-printf "   %-34s %s\n" "http://$DOMAIN" "$(curl -s -o /dev/null -w '%{http_code}' --max-time 12 http://$DOMAIN/ 2>/dev/null || echo 'n/a')"
-printf "   %-34s %s\n" "https://$DOMAIN" "$(curl -sk -o /dev/null -w '%{http_code}' --max-time 12 https://$DOMAIN/ 2>/dev/null || echo 'n/a')"
-printf "   %-34s %s\n" "https://$DOMAIN/admin" "$(curl -sk -o /dev/null -w '%{http_code}' --max-time 12 https://$DOMAIN/admin 2>/dev/null || echo 'n/a')"
-printf "   %-34s %s\n" "admin API locked (401 expected)" "$(curl -sk -o /dev/null -w '%{http_code}' --max-time 12 https://$DOMAIN/api/admin/settings 2>/dev/null || echo 'n/a')"
+# Two kinds of test, and the difference between them is the diagnosis:
+#
+#   ORIGIN  — --resolve forces the connection to 127.0.0.1 while keeping the
+#             Host header and TLS SNI correct. This hits OUR Nginx directly and
+#             bypasses Cloudflare entirely, so it tells the truth about whether
+#             this setup works.
+#   PUBLIC  — normal resolution, so it goes through Cloudflare's edge if the
+#             record is proxied (orange cloud). This is what visitors see.
+#
+# If origin is 200 but public is 301/5xx, the problem is in Cloudflare's
+# settings, not on this server.
+origin_https() {
+  curl -sk -o /dev/null -w '%{http_code}' --max-time 10 \
+    --resolve "$DOMAIN:443:127.0.0.1" "https://$DOMAIN$1" 2>/dev/null || echo 'DOWN'
+}
+origin_http() {
+  curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
+    --resolve "$DOMAIN:80:127.0.0.1" "http://$DOMAIN$1" 2>/dev/null || echo 'DOWN'
+}
+public_https() {
+  curl -sk -o /dev/null -w '%{http_code}' --max-time 12 "https://$DOMAIN$1" 2>/dev/null || echo 'n/a'
+}
+
+echo "   ── Server ke andar (origin, Cloudflare bypass) ──"
+printf "   %-38s %s\n" "PM2 processes online:" "$PM2_ONLINE"
+printf "   %-38s %s\n" "Node  127.0.0.1:$LOCAL_PORT/" "$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "http://127.0.0.1:$LOCAL_PORT/" 2>/dev/null || echo 'DOWN')"
+printf "   %-38s %s\n" "nginx  https://$DOMAIN/" "$(origin_https /)"
+printf "   %-38s %s\n" "nginx  /admin" "$(origin_https /admin)"
+printf "   %-38s %s\n" "nginx  /api/admin/settings (401 = sahi)" "$(origin_https /api/admin/settings)"
+printf "   %-38s %s\n" "nginx  http → https redirect (301 = sahi)" "$(origin_http /)"
+
+ORIGIN_HOME="$(origin_https /)"
+ORIGIN_ADMIN_API="$(origin_https /api/admin/settings)"
+
+echo ""
+echo "   ── Bahar se (public, Cloudflare ke through) ──"
+PUBLIC_HOME="$(public_https /)"
+printf "   %-38s %s\n" "https://$DOMAIN/" "$PUBLIC_HOME"
+printf "   %-38s %s\n" "https://$DOMAIN/admin" "$(public_https /admin)"
+printf "   %-38s %s\n" "https://$DOMAIN/api/admin/settings" "$(public_https /api/admin/settings)"
+
+# ---- Diagnosis -------------------------------------------------------
+echo ""
+echo "   ── Diagnosis ──"
+
+if [ "$ORIGIN_HOME" = "200" ]; then
+  echo "   ✅ ORIGIN sahi chal raha hai — app + nginx + SSL theek hain."
+else
+  echo "   🔴 ORIGIN pe problem hai (HTTP $ORIGIN_HOME). Nginx/app check karo:"
+  echo "        pm2 logs zero-fake-click --lines 30"
+  echo "        nginx -t && systemctl status nginx"
+fi
+
+if [ "$ORIGIN_ADMIN_API" = "401" ]; then
+  echo "   ✅ Admin API locked hai (401) — auth kaam kar rahi hai."
+else
+  echo "   🔴 Admin API ne $ORIGIN_ADMIN_API diya, 401 chahiye tha. Auth check karo."
+fi
+
+if [ "$ORIGIN_HOME" = "200" ] && [ "$PUBLIC_HOME" != "200" ]; then
+  echo ""
+  echo "   ⚠ ORIGIN 200 deta hai lekin PUBLIC $PUBLIC_HOME de raha hai."
+  echo "     Matlab problem CLOUDFLARE ki settings me hai, is server me nahi."
+  echo ""
+  echo "     Sabse common reason: SSL/TLS mode 'Flexible' pe hai."
+  echo "       Flexible = Cloudflare origin se HTTP:80 pe baat karta hai,"
+  echo "       hamara nginx HTTP ko HTTPS pe 301 karta hai → redirect LOOP."
+  echo ""
+  echo "     FIX:  dash.cloudflare.com → $DOMAIN → SSL/TLS → Overview"
+  echo "           → 'Full (strict)' select karo"
+  echo ""
+  echo "     Ya DNS record ko grey cloud (DNS only) kar do — phir Cloudflare"
+  echo "     beech me hi nahi aayega."
+fi
 echo ""
 
 # ---------------------------------------------------------------------
