@@ -2,10 +2,12 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const multer = require('multer');
 require('dotenv').config();
 
 const db = require('./db');
+const auth = require('./services/auth');
 const telegramService = require('./services/telegram');
 const metaCapiService = require('./services/metaCapi');
 const analyticsService = require('./services/analytics');
@@ -215,6 +217,28 @@ app.post('/api/generate-link', async (req, res) => {
 // -------------------------------------------------------------
 
 app.post('/api/telegram-webhook', async (req, res) => {
+  // ---------------------------------------------------------------
+  // Verify this update really came from Telegram.
+  // Without this, anyone could POST a fake chat_join_request and make
+  // the server fire bogus Lead events at the client's Meta pixel.
+  // ---------------------------------------------------------------
+  const webhookSecret = db.getSettings().telegramWebhookSecret;
+  if (webhookSecret) {
+    const received = String(req.headers['x-telegram-bot-api-secret-token'] || '');
+    const expected = String(webhookSecret);
+
+    const a = Buffer.from(received);
+    const b = Buffer.from(expected);
+    const ok = a.length === b.length && crypto.timingSafeEqual(a, b);
+
+    if (!ok) {
+      console.warn(`🛡️  Rejected Telegram webhook with bad secret from ${getClientIp(req)}`);
+      return res.status(403).send('Forbidden');
+    }
+  } else {
+    console.warn('⚠️  telegramWebhookSecret is empty — webhook is accepting unverified calls.');
+  }
+
   res.status(200).send('OK');
 
   try {
@@ -331,7 +355,194 @@ app.post('/api/telegram-webhook', async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// ADMIN & DASHBOARD APIS
+// ADMIN AUTHENTICATION
+// -------------------------------------------------------------
+
+/**
+ * Settings fields that must NEVER leave the server in a response.
+ * Before this guard existed, GET /api/admin/settings returned the Telegram
+ * bot token and Meta CAPI access token in plaintext to anyone on the internet.
+ */
+const SECRET_FIELDS = [
+  'telegramBotToken',
+  'metaCapiToken',
+  'metaTestEventCode',
+  'adminPassword',
+  'sessionSecret',
+  'telegramWebhookSecret'
+];
+
+/** Fields an admin may rotate, but never through the generic settings POST. */
+const SYSTEM_ONLY_FIELDS = ['sessionSecret', 'telegramWebhookSecret'];
+
+/** Replace secrets with a masked preview so the UI can show "saved ✓". */
+function sanitizeSettings(settings) {
+  const out = { ...settings };
+  SECRET_FIELDS.forEach(field => { delete out[field]; });
+
+  out.secrets = {
+    telegramBotToken: {
+      set: Boolean(settings.telegramBotToken),
+      masked: auth.maskSecret(settings.telegramBotToken)
+    },
+    metaCapiToken: {
+      set: Boolean(settings.metaCapiToken),
+      masked: auth.maskSecret(settings.metaCapiToken)
+    },
+    metaTestEventCode: {
+      set: Boolean(settings.metaTestEventCode),
+      masked: auth.maskSecret(settings.metaTestEventCode)
+    },
+    telegramWebhookSecret: {
+      set: Boolean(settings.telegramWebhookSecret),
+      masked: auth.maskSecret(settings.telegramWebhookSecret)
+    },
+    adminPassword: {
+      set: Boolean(settings.adminPassword),
+      // Warn loudly while the shipped default is still in use
+      isDefault: settings.adminPassword === 'admin'
+    }
+  };
+
+  return out;
+}
+
+/** Paths reachable without a session cookie. */
+const PUBLIC_ADMIN_PATHS = new Set([
+  '/api/admin/login',
+  '/api/admin/logout',
+  '/api/admin/status'
+]);
+
+// Registered BEFORE every /api/admin/* route below, so the whole dashboard
+// API surface is locked down by default (including the SSE stream — the
+// session travels in an httpOnly cookie because EventSource cannot set headers).
+app.use('/api/admin', (req, res, next) => {
+  const fullPath = (req.originalUrl || '').split('?')[0];
+  if (PUBLIC_ADMIN_PATHS.has(fullPath)) return next();
+
+  const settings = db.getSettings();
+  const token = auth.readToken(req) || req.headers['x-admin-token'] || '';
+
+  if (!auth.verifySessionToken(token, settings.sessionSecret)) {
+    return res.status(401).json({
+      success: false,
+      error: 'Authentication required',
+      code: 'AUTH_REQUIRED'
+    });
+  }
+
+  return next();
+});
+
+// Login
+app.post('/api/admin/login', (req, res) => {
+  const ip = getClientIp(req);
+
+  const guard = auth.checkLoginAllowed(ip);
+  if (guard.blocked) {
+    return res.status(429).json({
+      success: false,
+      error: `Too many failed attempts. Try again in ${guard.retryAfterSeconds}s.`,
+      code: 'RATE_LIMITED',
+      retryAfterSeconds: guard.retryAfterSeconds
+    });
+  }
+
+  const password = (req.body || {}).password;
+  const stored = db.getSettings().adminPassword;
+  const result = auth.verifyPassword(password, stored);
+
+  if (!result.ok) {
+    const remaining = auth.registerFailedLogin(ip);
+    return res.status(401).json({
+      success: false,
+      error: `Wrong password. ${Math.max(0, remaining)} attempt(s) left before a 10 minute lockout.`,
+      code: 'BAD_PASSWORD'
+    });
+  }
+
+  // Upgrade a legacy plaintext password to a salted hash on first success
+  if (result.needsUpgrade && result.upgraded) {
+    db.updateSettings({ adminPassword: result.upgraded });
+    console.log('🔐 Admin password upgraded from plaintext to salted hash.');
+  }
+
+  auth.clearLoginAttempts(ip);
+
+  const token = auth.createSessionToken(db.getSettings().sessionSecret);
+  res.setHeader('Set-Cookie', auth.sessionCookie(token, {
+    maxAgeSeconds: Math.floor(auth.SESSION_TTL_MS / 1000)
+  }));
+
+  console.log(`🔓 Admin login success from ${ip}`);
+  return res.json({ success: true, message: 'Logged in' });
+});
+
+// Logout
+app.post('/api/admin/logout', (req, res) => {
+  res.setHeader('Set-Cookie', auth.sessionCookie('', {}));
+  res.json({ success: true, message: 'Logged out' });
+});
+
+// Session status (also tells the UI whether the default password is still set)
+app.get('/api/admin/status', (req, res) => {
+  const settings = db.getSettings();
+  const token = auth.readToken(req) || req.headers['x-admin-token'] || '';
+
+  res.json({
+    success: true,
+    authenticated: auth.verifySessionToken(token, settings.sessionSecret),
+    usingDefaultPassword: settings.adminPassword === 'admin',
+    webhookSecretSet: Boolean(settings.telegramWebhookSecret),
+    telegramBotTokenSet: Boolean(settings.telegramBotToken),
+    metaCapiTokenSet: Boolean(settings.metaCapiToken)
+  });
+});
+
+// Change password (requires the current one; invalidates all sessions)
+app.post('/api/admin/change-password', (req, res) => {
+  const { currentPassword, newPassword } = req.body || {};
+  const settings = db.getSettings();
+
+  const check = auth.verifyPassword(currentPassword, settings.adminPassword);
+  if (!check.ok) {
+    return res.status(403).json({ success: false, error: 'Current password is incorrect' });
+  }
+
+  const next = String(newPassword || '');
+  if (next.length < 8) {
+    return res.status(400).json({
+      success: false,
+      error: 'New password must be at least 8 characters long'
+    });
+  }
+
+  db.updateSettings({
+    adminPassword: auth.hashPassword(next),
+    // Rotating the signing key instantly logs out every existing session,
+    // including any that an attacker may already hold.
+    sessionSecret: auth.generateSecret(32)
+  });
+
+  res.setHeader('Set-Cookie', auth.sessionCookie('', {}));
+  console.log('🔑 Admin password changed; all sessions invalidated.');
+  return res.json({ success: true, message: 'Password changed. Please log in again.' });
+});
+
+// Rotate the Telegram webhook secret (then re-run "Set Webhook")
+app.post('/api/admin/rotate-webhook-secret', (req, res) => {
+  const secret = auth.generateSecret(24);
+  db.updateSettings({ telegramWebhookSecret: secret });
+  res.json({
+    success: true,
+    message: 'Webhook secret rotated. Click "Set Webhook" again so Telegram learns the new value.',
+    masked: auth.maskSecret(secret)
+  });
+});
+
+// -------------------------------------------------------------
+// ADMIN & DASHBOARD APIS  (all below require a valid session)
 // -------------------------------------------------------------
 
 // SSE Real-time Feed
@@ -355,17 +566,35 @@ app.get('/api/admin/stats', (req, res) => {
   res.json({ success: true, stats });
 });
 
-// Settings
+// Settings (secrets are stripped and returned masked)
 app.get('/api/admin/settings', (req, res) => {
-  res.json({ success: true, settings: db.getSettings() });
+  res.json({ success: true, settings: sanitizeSettings(db.getSettings()) });
 });
 
 // Update Settings
 app.post('/api/admin/settings', (req, res) => {
   try {
-    const updated = db.updateSettings(req.body);
-    broadcastLiveUpdate({ type: 'SETTINGS_UPDATED', settings: updated });
-    res.json({ success: true, settings: updated });
+    const payload = { ...(req.body || {}) };
+
+    // System secrets have their own dedicated endpoints — never writable here.
+    SYSTEM_ONLY_FIELDS.forEach(field => { delete payload[field]; });
+
+    // For credential fields an empty input means "keep what is already saved",
+    // because the UI only ever receives a masked preview, not the real value.
+    ['telegramBotToken', 'metaCapiToken', 'metaTestEventCode', 'adminPassword'].forEach(field => {
+      if (!(field in payload)) return;
+      const value = String(payload[field] ?? '').trim();
+      if (!value) {
+        delete payload[field];
+      } else if (field === 'adminPassword') {
+        payload[field] = auth.hashPassword(value);
+      }
+    });
+
+    const updated = db.updateSettings(payload);
+    const safe = sanitizeSettings(updated);
+    broadcastLiveUpdate({ type: 'SETTINGS_UPDATED', settings: safe });
+    res.json({ success: true, settings: safe });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -378,14 +607,19 @@ app.post('/api/admin/upload-avatar', upload.single('avatar'), (req, res) => {
   }
   const avatarUrl = `/uploads/${req.file.filename}`;
   db.updateSettings({ avatarUrl });
-  broadcastLiveUpdate({ type: 'SETTINGS_UPDATED', settings: db.getSettings() });
+  broadcastLiveUpdate({ type: 'SETTINGS_UPDATED', settings: sanitizeSettings(db.getSettings()) });
   res.json({ success: true, avatarUrl });
 });
 
 // Test Telegram Bot
+// A blank token/chatId means "use the value already saved on the server" —
+// the browser never receives the real secret, only a masked preview.
 app.post('/api/admin/test-bot', async (req, res) => {
   try {
-    const { token, chatId } = req.body;
+    const saved = db.getSettings();
+    const token = String((req.body || {}).token || '').trim() || saved.telegramBotToken;
+    const chatId = String((req.body || {}).chatId || '').trim() || saved.telegramChatId;
+
     const botInfo = await telegramService.testBot(token);
     let chatInfo = null;
     if (chatId) {
@@ -400,10 +634,33 @@ app.post('/api/admin/test-bot', async (req, res) => {
 // Set Webhook
 app.post('/api/admin/set-webhook', async (req, res) => {
   try {
-    const { token, url } = req.body;
-    const webhookUrl = `${url.trim().replace(/\/$/, '')}/api/telegram-webhook`;
-    const result = await telegramService.setWebhook(token, webhookUrl);
-    res.json({ success: true, result, webhookUrl });
+    const saved = db.getSettings();
+    const body = req.body || {};
+    const token = String(body.token || '').trim() || saved.telegramBotToken;
+    const url = String(body.url || '').trim() || saved.publicUrl;
+
+    if (!token) {
+      return res.status(400).json({ success: false, error: 'Bot token is not saved yet. Enter it once and save settings first.' });
+    }
+    if (!url) {
+      return res.status(400).json({ success: false, error: 'Public URL is required (e.g. https://yourdomain.com)' });
+    }
+
+    const webhookUrl = `${url.replace(/\/$/, '')}/api/telegram-webhook`;
+
+    // Pass the per-install secret so Telegram signs every update it sends us.
+    const secret = saved.telegramWebhookSecret;
+    const result = await telegramService.setWebhook(token, webhookUrl, secret);
+
+    res.json({
+      success: true,
+      result,
+      webhookUrl,
+      secretConfigured: Boolean(secret),
+      message: secret
+        ? 'Webhook set with secret_token verification enabled.'
+        : 'Webhook set (no secret available).'
+    });
   } catch (error) {
     res.status(400).json({ success: false, error: error.message });
   }
@@ -412,7 +669,14 @@ app.post('/api/admin/set-webhook', async (req, res) => {
 // Test Meta CAPI
 app.post('/api/admin/test-meta', async (req, res) => {
   try {
-    const { pixelId, capiToken, testEventCode } = req.body;
+    const saved = db.getSettings();
+    const body = req.body || {};
+
+    // Blank field => fall back to the credential already stored server-side.
+    const pixelId = String(body.pixelId || '').trim() || saved.metaPixelId;
+    const capiToken = String(body.capiToken || '').trim() || saved.metaCapiToken;
+    const testEventCode = String(body.testEventCode || '').trim() || saved.metaTestEventCode;
+
     const result = await metaCapiService.testConnection(pixelId, capiToken, testEventCode);
     res.json(result);
   } catch (error) {

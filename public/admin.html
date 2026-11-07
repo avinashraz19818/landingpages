@@ -522,6 +522,55 @@
 </head>
 <body>
 
+  <!-- ===================== LOGIN OVERLAY =====================
+       Shown by admin.js until /api/admin/status confirms a valid
+       session. The whole dashboard API returns 401 without one. -->
+  <div id="loginOverlay" style="display:none; position:fixed; inset:0; z-index:9999;
+       background:#080c14; align-items:center; justify-content:center; padding:20px;">
+    <div style="width:100%; max-width:400px; background:#0f1624; border:1px solid #1a2436;
+                border-radius:16px; padding:34px 30px; box-shadow:0 24px 70px rgba(0,0,0,.65);">
+      <div style="text-align:center; margin-bottom:26px;">
+        <i class="fa-solid fa-shield-halved" style="font-size:34px; color:#ccff00;"></i>
+        <h1 style="font-size:20px; color:#f8fafc; margin-top:14px; letter-spacing:.3px;">
+          Admin Login
+        </h1>
+        <p style="color:#94a3b8; font-size:13px; margin-top:7px;">
+          0-Fake-Click Control Center
+        </p>
+      </div>
+
+      <div id="loginDefaultWarning" style="display:none; background:rgba(239,68,68,.12);
+           border:1px solid rgba(239,68,68,.4); border-radius:9px; padding:11px 13px;
+           color:#fca5a5; font-size:12.5px; line-height:1.5; margin-bottom:18px;">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        Default password <code style="color:#fecaca">admin</code> abhi bhi set hai.
+        Login karke turant badlo — warna koi bhi aapka bot token chura sakta hai.
+      </div>
+
+      <form id="loginForm" onsubmit="return handleLogin(event)">
+        <label style="display:block; color:#94a3b8; font-size:12px; font-weight:700;
+                      margin-bottom:7px; text-transform:uppercase; letter-spacing:.6px;">
+          Password
+        </label>
+        <input type="password" id="loginPassword" autocomplete="current-password" autofocus
+               style="width:100%; background:#080c14; border:1px solid #1a2436; border-radius:9px;
+                      padding:13px 14px; color:#f8fafc; font-size:15px; outline:none;"
+               onfocus="this.style.borderColor='#ccff00'"
+               onblur="this.style.borderColor='#1a2436'">
+
+        <div id="loginError" style="display:none; margin-top:13px; color:#ef4444;
+                                    font-size:13px; line-height:1.45;"></div>
+
+        <button type="submit" id="loginBtn"
+                style="width:100%; margin-top:20px; padding:14px; border:none; border-radius:9px;
+                       background:#ccff00; color:#080c14; font-size:15px; font-weight:800;
+                       cursor:pointer; letter-spacing:.3px;">
+          <i class="fa-solid fa-right-to-bracket"></i> Login
+        </button>
+      </form>
+    </div>
+  </div>
+
   <!-- Top Bar -->
   <header>
     <div class="brand">
@@ -537,6 +586,12 @@
         <span class="live-dot"></span>
         <span>SSE Stream Connected</span>
       </div>
+      <button onclick="logout()" title="Logout"
+              style="background:rgba(239,68,68,.12); border:1px solid rgba(239,68,68,.4);
+                     color:#fca5a5; border-radius:8px; padding:7px 13px; font-size:12.5px;
+                     font-weight:700; cursor:pointer;">
+        <i class="fa-solid fa-right-from-bracket"></i> Logout
+      </button>
     </div>
   </header>
 

@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const DB_FILE = path.join(__dirname, 'data.json');
 
@@ -73,7 +74,16 @@ const defaultData = {
     
     // System
     adminPassword: 'admin',
-    publicUrl: 'http://localhost:3000'
+    publicUrl: 'http://localhost:3000',
+
+    // --- Security (auto-generated on first boot, never expose publicly) ---
+    // HMAC key used to sign admin session cookies. Rotating this logs
+    // everyone out immediately.
+    sessionSecret: '',
+    // Sent to Telegram via setWebhook(secret_token=...) and verified on every
+    // incoming webhook call, so nobody can forge chat_join_request updates
+    // and fire fake Meta CAPI Lead events.
+    telegramWebhookSecret: ''
   },
   
   // Stored links & sessions
@@ -110,17 +120,52 @@ class Database {
       if (fs.existsSync(DB_FILE)) {
         const raw = fs.readFileSync(DB_FILE, 'utf8');
         const parsed = JSON.parse(raw);
-        return {
+        const merged = {
           settings: { ...defaultData.settings, ...parsed.settings },
           sessions: parsed.sessions || {},
           events: parsed.events || []
         };
+        this.ensureSecrets(merged.settings);
+        return merged;
       }
     } catch (e) {
       console.error('Error loading db, resetting to default:', e.message);
     }
+    this.ensureSecrets(defaultData.settings);
     this.save(defaultData);
     return defaultData;
+  }
+
+  /**
+   * Make sure per-install security secrets exist. Generated once, on first
+   * boot, so every deployment gets unique values instead of a shared default.
+   * Writes straight to disk so the values survive a crash before first save().
+   */
+  ensureSecrets(settings) {
+    let created = false;
+
+    if (!settings.sessionSecret) {
+      settings.sessionSecret = crypto.randomBytes(32).toString('hex');
+      created = true;
+      console.log('🔐 Generated new admin session secret.');
+    }
+
+    if (!settings.telegramWebhookSecret) {
+      settings.telegramWebhookSecret = crypto.randomBytes(24).toString('hex');
+      created = true;
+      console.log('🔐 Generated new Telegram webhook secret.');
+      console.log('   ⚠ Re-run "Set Webhook" in the dashboard so Telegram learns it.');
+    }
+
+    if (created) {
+      try {
+        fs.writeFileSync(DB_FILE, JSON.stringify(this.data || defaultData, null, 2), 'utf8');
+      } catch (e) {
+        console.error('Error persisting generated secrets:', e.message);
+      }
+    }
+
+    return settings;
   }
 
   save(dataToSave = this.data) {

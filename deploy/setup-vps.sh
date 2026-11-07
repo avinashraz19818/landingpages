@@ -74,6 +74,15 @@ if [ ! -f .env ]; then
   echo "   created .env with PORT=$NODE_PORT"
 fi
 
+# data.json is gitignored (it holds live tokens + lead history), so a fresh
+# clone will not have it. Seed it from the clean template. The app also
+# self-initialises, but seeding keeps the first boot deterministic.
+if [ ! -f data.json ] && [ -f data.json.example ]; then
+  cp data.json.example data.json
+  echo "   seeded data.json from data.json.example"
+fi
+chmod 600 data.json 2>/dev/null || true
+
 npm install --omit=dev --no-audit --no-fund
 
 # ---------- 4. PM2 ---------------------------------------------------

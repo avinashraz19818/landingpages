@@ -306,15 +306,36 @@ async function loadSettings() {
   }
 }
 
+/**
+ * Secrets are never sent to the browser — only a masked preview.
+ * So the input stays EMPTY and the placeholder shows what is saved.
+ * Leaving it blank on save means "keep the existing value".
+ */
+function setSecretField(inputId, secretInfo, label) {
+  const el = document.getElementById(inputId);
+  if (!el) return;
+
+  el.value = '';
+  if (secretInfo && secretInfo.set) {
+    el.placeholder = `${label} saved ✓  ${secretInfo.masked || ''}  — badalna ho to naya value likho, warna khali chhodo`;
+    el.title = 'Saved. Blank = keep existing.';
+  } else {
+    el.placeholder = `${label} abhi set nahi hai — yahan likho`;
+    el.title = '';
+  }
+}
+
 function populateSettingsForm(s) {
-  document.getElementById('inputBotToken').value = s.telegramBotToken || '';
+  const sec = s.secrets || {};
+
+  setSecretField('inputBotToken', sec.telegramBotToken, 'Bot token');
   document.getElementById('inputChatId').value = s.telegramChatId || '';
   document.getElementById('selectAutoApprove').value = String(s.autoApprove !== false);
   document.getElementById('inputPublicUrl').value = s.publicUrl || window.location.origin;
 
   document.getElementById('inputMetaPixelId').value = s.metaPixelId || '';
-  document.getElementById('inputMetaCapiToken').value = s.metaCapiToken || '';
-  document.getElementById('inputTestEventCode').value = s.metaTestEventCode || '';
+  setSecretField('inputMetaCapiToken', sec.metaCapiToken, 'CAPI token');
+  setSecretField('inputTestEventCode', sec.metaTestEventCode, 'Test code');
   document.getElementById('selectMetaEventName').value = s.metaEventName || 'Lead';
 
   // Customizer tab
@@ -331,16 +352,27 @@ function populateSettingsForm(s) {
 }
 
 async function saveAllSettings() {
+  const val = id => (document.getElementById(id)?.value || '').trim();
+
   const payload = {
-    telegramBotToken: document.getElementById('inputBotToken').value.trim(),
-    telegramChatId: document.getElementById('inputChatId').value.trim(),
+    telegramChatId: val('inputChatId'),
     autoApprove: document.getElementById('selectAutoApprove').value === 'true',
-    publicUrl: document.getElementById('inputPublicUrl').value.trim(),
-    metaPixelId: document.getElementById('inputMetaPixelId').value.trim(),
-    metaCapiToken: document.getElementById('inputMetaCapiToken').value.trim(),
-    metaTestEventCode: document.getElementById('inputTestEventCode').value.trim(),
+    publicUrl: val('inputPublicUrl'),
+    metaPixelId: val('inputMetaPixelId'),
     metaEventName: document.getElementById('selectMetaEventName').value
   };
+
+  // Secrets: only send when the admin actually typed something.
+  // A blank field means "keep the value already stored on the server".
+  const secretMap = {
+    telegramBotToken: 'inputBotToken',
+    metaCapiToken: 'inputMetaCapiToken',
+    metaTestEventCode: 'inputTestEventCode'
+  };
+  Object.entries(secretMap).forEach(([field, elId]) => {
+    const v = val(elId);
+    if (v) payload[field] = v;
+  });
 
   try {
     const res = await fetch('/api/admin/settings', {
@@ -351,6 +383,11 @@ async function saveAllSettings() {
     const data = await res.json();
     if (data.success) {
       alert('✓ Settings saved successfully!');
+      // Refresh so masked placeholders reflect what is now stored
+      currentSettings = data.settings;
+      populateSettingsForm(data.settings);
+    } else {
+      alert('Save failed: ' + (data.error || 'unknown error'));
     }
   } catch (err) {
     alert('Failed to save settings: ' + err.message);
@@ -418,13 +455,21 @@ async function uploadAvatar() {
   }
 }
 
+/** Is a secret either typed in the form or already stored on the server? */
+function secretAvailable(fieldKey, inputId) {
+  const typed = (document.getElementById(inputId)?.value || '').trim();
+  if (typed) return true;
+  return Boolean(currentSettings?.secrets?.[fieldKey]?.set);
+}
+
 async function testBotConnection() {
   const token = document.getElementById('inputBotToken').value.trim();
   const chatId = document.getElementById('inputChatId').value.trim();
   const resDiv = document.getElementById('botTestResult');
 
-  if (!token) {
-    alert('Please enter your Telegram Bot Token');
+  // Blank is fine now — the server falls back to the saved token.
+  if (!token && !secretAvailable('telegramBotToken', 'inputBotToken')) {
+    alert('Pehle Telegram Bot Token daal kar Settings save karo.');
     return;
   }
   resDiv.innerHTML = '<span style="color: #38bdf8;">Testing connection...</span>';
@@ -451,8 +496,13 @@ async function setupWebhook() {
   const token = document.getElementById('inputBotToken').value.trim();
   const url = document.getElementById('inputPublicUrl').value.trim();
   const resDiv = document.getElementById('botTestResult');
-  if (!token || !url) {
-    alert('Both Bot Token and Public URL are required');
+
+  if (!token && !secretAvailable('telegramBotToken', 'inputBotToken')) {
+    alert('Bot Token saved nahi hai. Pehle token daal kar Settings save karo.');
+    return;
+  }
+  if (!url) {
+    alert('Public URL zaroori hai (jaise https://yourdomain.com)');
     return;
   }
   resDiv.innerHTML = '<span style="color: #38bdf8;">Setting webhook...</span>';
@@ -479,8 +529,13 @@ async function testMetaCapi() {
   const testEventCode = document.getElementById('inputTestEventCode').value.trim();
   const resDiv = document.getElementById('metaTestResult');
 
-  if (!pixelId || !capiToken) {
-    alert('Please enter your Meta Pixel ID and CAPI Access Token');
+  // Blank CAPI token is fine — the server falls back to the saved one.
+  if (!pixelId) {
+    alert('Meta Pixel ID zaroori hai.');
+    return;
+  }
+  if (!capiToken && !secretAvailable('metaCapiToken', 'inputMetaCapiToken')) {
+    alert('CAPI Access Token saved nahi hai. Pehle token daal kar Settings save karo.');
     return;
   }
   resDiv.innerHTML = '<span style="color: #38bdf8;">Firing test event to Meta...</span>';
@@ -540,8 +595,120 @@ async function clearAllData() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+// =====================================================================
+// AUTH GATE
+// Every /api/admin/* endpoint now requires a valid httpOnly session
+// cookie. This block shows a login screen until /api/admin/status
+// confirms the session, and re-shows it if any call comes back 401.
+// =====================================================================
+
+let dashboardBooted = false;
+
+function showLoginOverlay(message) {
+  const overlay = document.getElementById('loginOverlay');
+  if (!overlay) return;
+  overlay.style.display = 'flex';
+  if (message) {
+    const err = document.getElementById('loginError');
+    err.textContent = message;
+    err.style.display = 'block';
+  }
+  const input = document.getElementById('loginPassword');
+  if (input) input.focus();
+}
+
+function hideLoginOverlay() {
+  const overlay = document.getElementById('loginOverlay');
+  if (overlay) overlay.style.display = 'none';
+  const err = document.getElementById('loginError');
+  if (err) { err.textContent = ''; err.style.display = 'none'; }
+}
+
+/** Thin fetch interceptor: a 401 anywhere bounces the user back to login. */
+const nativeFetch = window.fetch.bind(window);
+window.fetch = async (...args) => {
+  const res = await nativeFetch(...args);
+  const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || '';
+  if (res.status === 401 && !url.includes('/api/admin/login')) {
+    dashboardBooted = false;
+    showLoginOverlay('Session expire ho gaya. Dobara login karo.');
+  }
+  return res;
+};
+
+async function handleLogin(event) {
+  event.preventDefault();
+
+  const btn = document.getElementById('loginBtn');
+  const errBox = document.getElementById('loginError');
+  const password = document.getElementById('loginPassword').value;
+
+  errBox.style.display = 'none';
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Verifying...';
+
+  try {
+    const res = await nativeFetch('/api/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password })
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      document.getElementById('loginPassword').value = '';
+      hideLoginOverlay();
+      bootDashboard();
+    } else {
+      errBox.textContent = data.error || 'Login failed.';
+      errBox.style.display = 'block';
+    }
+  } catch (e) {
+    errBox.textContent = 'Server se connect nahi ho paya: ' + e.message;
+    errBox.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> Login';
+  }
+
+  return false;
+}
+
+async function logout() {
+  if (!confirm('Logout karna hai?')) return;
+  try { await nativeFetch('/api/admin/logout', { method: 'POST' }); } catch (e) {}
+  dashboardBooted = false;
+  showLoginOverlay();
+}
+
+/** Boot the dashboard only once per session. */
+function bootDashboard() {
+  if (dashboardBooted) return;
+  dashboardBooted = true;
   loadStats();
   loadSettings();
   initRealtimeStream();
+}
+
+async function checkAuthAndBoot() {
+  try {
+    const res = await nativeFetch('/api/admin/status');
+    const data = await res.json();
+
+    const warn = document.getElementById('loginDefaultWarning');
+    if (warn && data.usingDefaultPassword) warn.style.display = 'block';
+
+    if (data.authenticated) {
+      hideLoginOverlay();
+      bootDashboard();
+    } else {
+      showLoginOverlay();
+    }
+  } catch (e) {
+    showLoginOverlay('Status check fail: ' + e.message);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  checkAuthAndBoot();
 });

@@ -84,12 +84,28 @@ class TelegramService {
     }
   }
 
-  // Set Telegram Webhook to our Server
-  async setWebhook(botToken, webhookUrl) {
-    const res = await axios.post(`${this.getApiUrl(botToken)}/setWebhook`, {
+  /**
+   * Set Telegram Webhook to our Server.
+   *
+   * `secretToken` is passed as Telegram's `secret_token`. Telegram then echoes
+   * it back in the `X-Telegram-Bot-Api-Secret-Token` header on every update,
+   * which lets the server prove the call really came from Telegram and reject
+   * forged chat_join_request payloads (which would otherwise fire fake Meta
+   * CAPI Lead events). Must be 1-256 chars, A-Z a-z 0-9 _ -.
+   */
+  async setWebhook(botToken, webhookUrl, secretToken = '') {
+    const payload = {
       url: webhookUrl,
       allowed_updates: ['chat_join_request', 'message']
-    }, { timeout: 10000 });
+    };
+
+    if (secretToken) {
+      payload.secret_token = String(secretToken).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 256);
+    }
+
+    const res = await axios.post(`${this.getApiUrl(botToken)}/setWebhook`, payload, {
+      timeout: 10000
+    });
     return res.data;
   }
 

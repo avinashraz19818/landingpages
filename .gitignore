@@ -3,3 +3,22 @@ node_modules/
 .DS_Store
 Thumbs.db
 *.log
+
+# ---------------------------------------------------------------------
+# LIVE DATA — never commit this.
+# data.json holds every client's Telegram bot token, Meta CAPI access
+# token, admin password hash and the full lead history. Committing it
+# would leak credentials to a public GitHub repo and let a `git pull`
+# on the VPS wipe live analytics.
+#
+# A clean template lives in data.json.example — commit that instead.
+# ---------------------------------------------------------------------
+data.json
+
+# Uploaded avatars are per-install runtime assets
+public/uploads/*
+!public/uploads/default-avatar.svg
+
+# PM2 / Nginx output
+deploy/*.local.*
+backups/
