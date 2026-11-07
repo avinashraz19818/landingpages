@@ -7,7 +7,20 @@
 #  Nginx vhost, own SSL certificate.
 #
 #  Usage:
-#    bash deploy/add-client.sh add    <slug> <domain> [--alias www.domain] [--label "Name"] [--port 3005]
+#    bash deploy/add-client.sh add    <slug> <domain> [options]
+#        --label "Name"     human-readable client name
+#        --alias <host>     extra server_name (defaults to www.<domain>
+#                           for apex domains, none for subdomains)
+#        --port <n>         force a specific internal Node port
+#        --wildcard         reuse the apex wildcard cert instead of
+#                           issuing a new one. Use this when clients are
+#                           subdomains of one domain and you have already
+#                           run deploy/wildcard-cert.sh — adding a client
+#                           then needs no certificate wait at all.
+#                           Subdomains only; rejected for an apex domain.
+#        --cert <name>      like --wildcard but names the cert dir under
+#                           /etc/letsencrypt/live/ explicitly, for odd
+#                           layouts such as a.b.example.co.in
 #    bash deploy/add-client.sh list
 #    bash deploy/add-client.sh update <slug>|--all
 #    bash deploy/add-client.sh logs   <slug>
@@ -109,17 +122,19 @@ unregister_client() { # <slug>
 # ---------------------------------------------------------------------
 cmd_add() {
   need_root
-  local slug="" domain="" label="" port="" alias_arg=""
+  local slug="" domain="" label="" port="" alias_arg="" cert_override="" wildcard=0
 
   slug="${1:-}"; domain="${2:-}"
-  [ -n "$slug" ] && [ -n "$domain" ] || die "Usage: add-client.sh add <slug> <domain> [--alias www.domain] [--label \"Name\"] [--port N]"
+  [ -n "$slug" ] && [ -n "$domain" ] || die "Usage: add-client.sh add <slug> <domain> [--label \"Name\"] [--alias host] [--port N] [--wildcard] [--cert name]"
   shift 2 || true
 
   while [ $# -gt 0 ]; do
     case "$1" in
-      --alias) alias_arg="${2:-}"; shift 2 ;;
-      --label) label="${2:-}"; shift 2 ;;
-      --port)  port="${2:-}"; shift 2 ;;
+      --alias)    alias_arg="${2:-}"; shift 2 ;;
+      --label)    label="${2:-}"; shift 2 ;;
+      --port)     port="${2:-}"; shift 2 ;;
+      --cert)     cert_override="${2:-}"; wildcard=1; shift 2 ;;
+      --wildcard) wildcard=1; shift ;;
       *) die "Unknown option: $1" ;;
     esac
   done
@@ -133,9 +148,47 @@ cmd_add() {
   [ -n "$label" ] || label="$slug"
   [ -n "$port" ]  || port="$(next_port)"
 
-  # Default alias = www.<domain> unless the caller passed one
+  # Default alias: only add www. for an apex domain (yourdomain.com).
+  # For a subdomain like ree.yourdomain.com, www.ree.yourdomain.com makes
+  # no sense and would just fail the cert request.
   local aliases
-  if [ -n "$alias_arg" ]; then aliases="$alias_arg"; else aliases="www.$domain"; fi
+  if [ -n "$alias_arg" ]; then
+    aliases="$alias_arg"
+  else
+    local dots; dots="$(echo "$domain" | tr -cd '.' | wc -c)"
+    if [ "$dots" -eq 1 ]; then aliases="www.$domain"; else aliases=""; fi
+  fi
+
+  # Which Let's Encrypt cert directory the vhost should point at.
+  # --wildcard reuses the apex-domain cert created by wildcard-cert.sh,
+  # so ree.yourdomain.com uses /etc/letsencrypt/live/yourdomain.com/
+  local certname="$domain"
+  if [ "$wildcard" -eq 1 ]; then
+    # --wildcard only makes sense for a subdomain: ree.yourdomain.com reuses
+    # the *.yourdomain.com cert. On an apex domain, stripping the first label
+    # would leave garbage ("sureshotree.com" -> "com"), so reject it.
+    local wdots; wdots="$(echo "$domain" | tr -cd '.' | wc -c)"
+    if [ "$wdots" -lt 2 ]; then
+      die "--wildcard sirf subdomain ke liye hai (jaise ree.yourdomain.com).
+   '$domain' ek apex domain hai — iske liye --wildcard mat lagao, script
+   apne aap per-domain Let's Encrypt cert issue kar dega."
+    fi
+
+    certname="$(echo "$domain" | cut -d. -f2-)"
+
+    # --cert lets you override the cert dir name for unusual layouts
+    # (e.g. a.b.example.co.in whose wildcard was issued for example.co.in)
+    [ -n "$cert_override" ] && certname="$cert_override"
+
+    if [ ! -f "/etc/letsencrypt/live/$certname/fullchain.pem" ]; then
+      die "Wildcard cert nahi mila: /etc/letsencrypt/live/$certname/
+
+   Pehle chalao:  bash deploy/wildcard-cert.sh $certname aapka@email.com
+
+   Agar aapka wildcard cert kisi dusre naam se bana hai to --cert <name> do.
+   Available certs:  certbot certificates"
+    fi
+  fi
 
   local appdir="$CLIENTS_DIR/$slug"
   local repo; repo="$(reg "return r.repo")"; repo="${repo:-$REPO_DEFAULT}"
@@ -143,8 +196,9 @@ cmd_add() {
   log "=============================================================="
   log " Adding client: <b>$label</b>"
   log "   slug    : $slug"
-  log "   domain  : $domain  (aliases: $aliases)"
+  log "   domain  : $domain  (aliases: ${aliases:-none})"
   log "   port    : $port"
+  log "   cert    : $([ "$wildcard" -eq 1 ] && echo "wildcard ($certname)" || echo "per-domain ($domain)")"
   log "   appdir  : $appdir"
   log "=============================================================="
 
@@ -207,7 +261,7 @@ cmd_add() {
     log "   installed /etc/nginx/conf.d/zfc.conf"
   fi
 
-  sed "s|__SLUG__|$slug|g; s|__DOMAIN__|$domain|g; s|__ALIASES__|$aliases|g; s|__PORT__|$port|g; s|__APPDIR__|$appdir|g" \
+  sed "s|__SLUG__|$slug|g; s|__DOMAIN__|$domain|g; s|__ALIASES__|$aliases|g; s|__PORT__|$port|g; s|__APPDIR__|$appdir|g; s|__CERTNAME__|$certname|g" \
     "$NGINX_TEMPLATE" > "/etc/nginx/sites-available/zfc-$slug.conf"
 
   # Until SSL exists, serve a plain HTTP vhost so certbot can validate
@@ -232,32 +286,51 @@ EOF
   nginx -t >/dev/null && systemctl reload nginx
 
   # ---- 5. SSL ----
-  log "▶ [5/6] Issuing SSL for $domain..."
-  command -v certbot >/dev/null 2>&1 || {
-    apt-get install -y certbot python3-certbot-nginx >/dev/null
-  }
-
-  local cert_args=(-d "$domain")
-  for a in $aliases; do cert_args+=(-d "$a"); done
-
   local ssl_ok=0
-  if certbot certonly --webroot -w /var/www/certbot "${cert_args[@]}" \
-       --non-interactive --agree-tos --register-unsafely-without-email >/dev/null 2>&1; then
-    ssl_ok=1
+
+  if [ "$wildcard" -eq 1 ]; then
+    # Certificate already exists (wildcard-cert.sh made it). Nothing to issue —
+    # just switch the vhost on. This is the fast path for every new subdomain.
+    log "▶ [5/6] Reusing wildcard cert for *.$certname..."
     cp "/etc/nginx/sites-available/zfc-$slug.conf" "/etc/nginx/sites-enabled/zfc-$slug.conf"
     if nginx -t >/dev/null 2>&1; then
       systemctl reload nginx
-      log "   ✅ SSL live for $domain"
+      ssl_ok=1
+      log "   ✅ SSL live for $domain (wildcard, no new certificate needed)"
     else
-      log "   ⚠ full vhost failed nginx -t; left on the HTTP bootstrap config."
-      # Restore bootstrap so the site still works
-      nginx -t >/dev/null 2>&1 || true
+      log "   ⚠ nginx -t fail hua. Bootstrap HTTP config pe chhod diya hai."
+      nginx -t 2>&1 | sed 's/^/     /' || true
     fi
   else
-    log "   ⚠ SSL not issued yet — DNS for $domain probably does not point at this VPS."
-    log "     Site is live over HTTP. After fixing DNS run:"
-    log "       certbot certonly --webroot -w /var/www/certbot ${cert_args[*]}"
-    log "     then:  cp /etc/nginx/sites-available/zfc-$slug.conf /etc/nginx/sites-enabled/ && nginx -t && systemctl reload nginx"
+    log "▶ [5/6] Issuing SSL for $domain..."
+    command -v certbot >/dev/null 2>&1 || {
+      apt-get install -y certbot python3-certbot-nginx >/dev/null
+    }
+
+    local cert_args=(-d "$domain")
+    for a in $aliases; do cert_args+=(-d "$a"); done
+
+    if certbot certonly --webroot -w /var/www/certbot "${cert_args[@]}" \
+         --non-interactive --agree-tos --register-unsafely-without-email >/dev/null 2>&1; then
+      ssl_ok=1
+      cp "/etc/nginx/sites-available/zfc-$slug.conf" "/etc/nginx/sites-enabled/zfc-$slug.conf"
+      if nginx -t >/dev/null 2>&1; then
+        systemctl reload nginx
+        log "   ✅ SSL live for $domain"
+      else
+        log "   ⚠ full vhost failed nginx -t; left on the HTTP bootstrap config."
+        nginx -t 2>&1 | sed 's/^/     /' || true
+      fi
+    else
+      log "   ⚠ SSL not issued yet — DNS for $domain probably does not point at this VPS."
+      log "     Site is live over HTTP. After fixing DNS run:"
+      log "       certbot certonly --webroot -w /var/www/certbot ${cert_args[*]}"
+      log "     then:  cp /etc/nginx/sites-available/zfc-$slug.conf /etc/nginx/sites-enabled/ && nginx -t && systemctl reload nginx"
+      log ""
+      log "     💡 Subdomain use kar rahe ho? Wildcard cert zyada aasan hai:"
+      log "          bash deploy/wildcard-cert.sh $certname aapka@email.com"
+      log "        phir is client ko dobara add karo --wildcard ke saath."
+    fi
   fi
 
   # ---- 6. Registry ----
@@ -267,6 +340,7 @@ EOF
       slug:'$slug', label:'$label', domain:'$domain',
       aliases:'$aliases'.split(' ').filter(Boolean),
       port:$port, appdir:'$appdir', ssl: $([ $ssl_ok -eq 1 ] && echo true || echo false),
+      certname:'$certname', wildcard: $([ $wildcard -eq 1 ] && echo true || echo false),
       createdAt:new Date().toISOString()
     }));
   ")"
@@ -415,8 +489,9 @@ cmd_remove() {
 
 # ---------------------------------------------------------------------
 usage() {
-  # Print the comment banner at the top of this file (lines 2-18)
-  sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^#\{1,2\} \{0,1\}//'
+  # Print the comment banner at the top of this file, up to its closing rule.
+  # Uses awk rather than a hardcoded line range so it cannot drift.
+  awk 'NR==1 {next} /^# =====/ {n++; if (n==2) exit; next} n==1 {sub(/^# ?/, ""); print}' "${BASH_SOURCE[0]}"
 }
 
 case "${1:-}" in
