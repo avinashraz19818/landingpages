@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>0-Fake-Click Analytics & Control Center | Ultra-Pro</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --bg-dark: #080c14;
+      --card-bg: #0f1624;
+      --card-border: #1a2436;
+      --text-white: #f8fafc;
+      --text-muted: #94a3b8;
+      --green-lead: #10b981;
+      --purple-pixel: #c084fc;
+      --blue-link: #38bdf8;
+      --amber-stat: #f59e0b;
+      --lime-stat: #ccff00;
+      --accent-red: #ef4444;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-white);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: #0d131f;
+      border-bottom: 1px solid var(--card-border);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .brand-badge {
+      background: rgba(204, 255, 0, 0.15);
+      color: var(--lime-stat);
+      border: 1px solid rgba(204, 255, 0, 0.3);
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .live-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--green-lead);
+      background: rgba(16, 185, 129, 0.1);
+      padding: 5px 12px;
+      border-radius: 9999px;
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green-lead);
+      box-shadow: 0 0 8px var(--green-lead);
+      animation: blink 1.5s infinite;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .tabs-bar {
+      display: flex;
+      gap: 8px;
+      background: #0b0f1a;
+      padding: 8px 24px;
+      border-bottom: 1px solid var(--card-border);
+      overflow-x: auto;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13.5px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-white);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .tab-btn.active {
+      color: var(--text-white);
+      background: #182236;
+      border-color: #2a3b56;
+    }
+
+    main {
+      flex: 1;
+      padding: 24px;
+      max-width: 1400px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* Metric Cards Grid */
+    .dash-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .stat-card-group {
+      background: #0f1624;
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 18px 20px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    }
+
+    .group-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .group-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 17px;
+      font-weight: 700;
+    }
+
+    .circle-indicator {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+    }
+
+    .circle-green { background: #22c55e; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); }
+    .circle-yellow { background: #eab308; box-shadow: 0 0 10px rgba(234, 179, 8, 0.4); }
+    .circle-blue { background: #06b6d4; box-shadow: 0 0 10px rgba(6, 182, 212, 0.4); }
+
+    .group-date-badge {
+      background: #182236;
+      color: #94a3b8;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-family: monospace;
+    }
+
+    .metrics-row {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    @media (min-width: 768px) {
+      .metrics-row {
+        grid-template-columns: repeat(4, 1fr);
+      }
+    }
+
+    .metric-box {
+      background: #141c2c;
+      border: 1px solid #1f2c42;
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .metric-label {
+      font-size: 11px;
+      font-weight: 800;
+      color: #64748b;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+    }
+
+    .metric-value {
+      font-size: 32px;
+      font-weight: 900;
+      line-height: 1;
+      font-family: 'Outfit', sans-serif;
+    }
+
+    .val-green { color: #34d399; text-shadow: 0 0 20px rgba(52, 211, 153, 0.2); }
+    .val-purple { color: #d8b4fe; text-shadow: 0 0 20px rgba(216, 180, 254, 0.2); }
+    .val-blue { color: #38bdf8; text-shadow: 0 0 20px rgba(56, 189, 248, 0.2); }
+    .val-orange { color: #fb923c; text-shadow: 0 0 20px rgba(251, 146, 60, 0.2); }
+    .val-gold { color: #fbbf24; text-shadow: 0 0 20px rgba(251, 191, 36, 0.2); }
+    .val-lime { color: #ccff00; text-shadow: 0 0 20px rgba(204, 255, 0, 0.2); }
+
+    /* Tables & Grids */
+    .table-container {
+      background: #0f1624;
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 20px;
+      overflow-x: auto;
+    }
+
+    .table-header {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 13.5px;
+    }
+
+    th {
+      background: #141c2c;
+      color: #94a3b8;
+      padding: 12px 16px;
+      font-weight: 700;
+      border-bottom: 1px solid #1f2c42;
+    }
+
+    td {
+      padding: 14px 16px;
+      border-bottom: 1px solid #182236;
+      color: #cbd5e1;
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    /* Chart Container */
+    .chart-box {
+      background: #0f1624;
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 20px;
+      height: 320px;
+      margin-bottom: 20px;
+    }
+
+    /* Live Feed */
+    .live-feed-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .event-item {
+      background: #141c2c;
+      border-left: 4px solid #38bdf8;
+      border-radius: 8px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 13px;
+    }
+
+    .event-type-badge {
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .badge-LINK_GENERATED { background: rgba(56, 189, 248, 0.2); color: #38bdf8; }
+    .badge-JOIN_REQUEST { background: rgba(52, 211, 153, 0.2); color: #34d399; }
+    .badge-PIXEL_FIRED { background: rgba(192, 132, 252, 0.2); color: #c084fc; }
+    .badge-MEMBER_APPROVED { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
+
+    /* Form Styles */
+    .settings-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 24px;
+    }
+
+    @media (min-width: 900px) {
+      .settings-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .settings-card {
+      background: #0f1624;
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 24px;
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 800;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #f8fafc;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #94a3b8;
+      margin-bottom: 6px;
+    }
+
+    .form-input, .form-select, .form-textarea {
+      width: 100%;
+      background: #141c2c;
+      border: 1px solid #1f2c42;
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .form-input:focus, .form-select:focus, .form-textarea:focus {
+      border-color: #38bdf8;
+    }
+
+    .form-hint {
+      font-size: 11.5px;
+      color: #64748b;
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+
+    .btn {
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 13.5px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+
+    .btn-primary { background: #0284c7; color: #fff; }
+    .btn-primary:hover { background: #0369a1; }
+    .btn-success { background: #059669; color: #fff; }
+    .btn-success:hover { background: #047857; }
+    .btn-danger { background: #dc2626; color: #fff; }
+    .btn-danger:hover { background: #b91c1c; }
+    .btn-lime { background: #ccff00; color: #000; font-weight: 800; }
+    .btn-lime:hover { background: #b8e600; }
+
+    .preview-frame {
+      width: 100%;
+      max-width: 400px;
+      height: 640px;
+      border: 8px solid #182236;
+      border-radius: 36px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      background: #000;
+    }
+
+    .alert-banner {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid #10b981;
+      color: #34d399;
+      padding: 12px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* Visual Theme Gallery Grid */
+    .theme-cards-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      max-height: 480px;
+      overflow-y: auto;
+      padding: 4px;
+      margin-bottom: 16px;
+    }
+
+    @media (min-width: 600px) {
+      .theme-cards-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+
+    .theme-card-item {
+      background: #141c2c;
+      border: 2px solid #1f2c42;
+      border-radius: 12px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+    }
+
+    .theme-card-item:hover {
+      transform: translateY(-2px);
+      border-color: #38bdf8;
+    }
+
+    .theme-card-item.active {
+      border-color: #ccff00;
+      box-shadow: 0 0 16px rgba(204, 255, 0, 0.3);
+    }
+
+    .theme-card-img {
+      width: 100%;
+      height: 140px;
+      object-fit: cover;
+      background: #000;
+      display: block;
+      border-bottom: 1px solid #1f2c42;
+    }
+
+    .theme-card-info {
+      padding: 8px 10px;
+    }
+
+    .theme-card-title {
+      font-size: 12px;
+      font-weight: 800;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .theme-card-tag {
+      font-size: 10.5px;
+      color: #94a3b8;
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .theme-selected-badge {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      background: #ccff00;
+      color: #000;
+      font-size: 10px;
+      font-weight: 900;
+      padding: 2px 6px;
+      border-radius: 4px;
+      display: none;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    }
+
+    .theme-card-item.active .theme-selected-badge {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Bar -->
+  <header>
+    <div class="brand">
+      <i class="fa-solid fa-crosshairs" style="color: #ccff00;"></i>
+      <span>0-Fake-Click Center</span>
+      <span class="brand-badge">ULTRA-PRO</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 14px;">
+      <a href="/" target="_blank" class="btn btn-lime" style="padding: 6px 14px; font-size: 12.5px;">
+        <i class="fa-solid fa-arrow-up-right-from-square"></i> Open Live Page
+      </a>
+      <div class="live-status">
+        <span class="live-dot"></span>
+        <span>SSE Stream Connected</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <div class="tabs-bar">
+    <button class="tab-btn active" onclick="switchTab('analytics')">
+      <i class="fa-solid fa-chart-line"></i> Analytics & Hisaab
+    </button>
+    <button class="tab-btn" onclick="switchTab('livefeed')">
+      <i class="fa-solid fa-rss"></i> Live Activity Feed
+    </button>
+    <button class="tab-btn" onclick="switchTab('setup')">
+      <i class="fa-solid fa-gears"></i> Bot & Meta CAPI Setup
+    </button>
+    <button class="tab-btn" onclick="switchTab('customizer')">
+      <i class="fa-solid fa-palette"></i> Landing Page Designer
+    </button>
+    <button class="tab-btn" onclick="switchTab('simulator')">
+      <i class="fa-solid fa-vial"></i> 1-Click Lead Simulator
+    </button>
+  </div>
+
+  <!-- Main Container -->
+  <main>
+    
+    <!-- TAB 1: ANALYTICS -->
+    <div id="tab-analytics" class="tab-content active">
+      
+      <div class="alert-banner">
+        <i class="fa-solid fa-shield-halved" style="font-size: 18px;"></i>
+        <div>
+          <strong>0 Fake Click Protection Active:</strong> Meta Pixel is NOT fired on landing page clicks. Pixel is ONLY fired when a user physically presses <strong>"Request to Join"</strong> inside Telegram!
+        </div>
+      </div>
+
+      <!-- Live 24-Hour Conversion Hourly Chart -->
+      <div class="chart-box">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
+          <h4 style="font-size:14px; color:#cbd5e1;"><i class="fa-solid fa-chart-area" style="color:#ccff00;"></i> Today's Hourly Link & Join Trend</h4>
+          <span style="font-size: 12px; color:#64748b;">Live Real-Time Data</span>
+        </div>
+        <canvas id="hourlyChart" style="max-height: 250px;"></canvas>
+      </div>
+
+      <div class="dash-grid">
+        
+        <!-- AAJ (TODAY) -->
+        <div class="stat-card-group">
+          <div class="group-header">
+            <div class="group-title">
+              <span class="circle-indicator circle-green"></span>
+              <span>Aaj (Today)</span>
+            </div>
+            <div class="group-date-badge" id="todayDateLabel">Loading...</div>
+          </div>
+          <div class="metrics-row">
+            <div class="metric-box">
+              <div class="metric-label">Join Requests (Leads)</div>
+              <div class="metric-value val-green" id="todayJoinRequests">0</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">Pixel Hits (Fired)</div>
+              <div class="metric-value val-purple" id="todayPixelHits">0</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">Links Generated</div>
+              <div class="metric-value val-blue" id="todayLinksGen">0</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">Approved Members</div>
+              <div class="metric-value val-lime" id="todayApproved">0</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- KAL (YESTERDAY) -->
+        <div class="stat-card-group">
+          <div class="group-header">
+            <div class="group-title">
+              <span class="circle-indicator circle-yellow"></span>
+              <span>Kal (Yesterday)</span>
+            </div>
+            <div class="group-date-badge" id="yesterdayDateLabel">Loading...</div>
+          </div>
+          <div class="metrics-row">
+            <div class="metric-box">
+              <div class="metric-label">Join Requests (Leads)</div>
+              <div class="metric-value val-orange" id="yesterdayJoinRequests">0</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">Pixel Hits (Fired)</div>
+              <div class="metric-value val-purple" id="yesterdayPixelHits">0</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">Links Generated</div>
+              <div class="metric-value val-blue" id="yesterdayLinksGen">0</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">Approved Members</div>
+              <div class="metric-value val-gold" id="yesterdayApproved">0</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- LIFETIME TOTAL -->
+        <div class="stat-card-group">
+          <div class="group-header">
+            <div class="group-title">
+              <span class="circle-indicator circle-blue"></span>
+              <span>Lifetime Total</span>
+            </div>
+            <div class="group-date-badge">All-Time</div>
+          </div>
+          <div class="metrics-row">
+            <div class="metric-box">
+              <div class="metric-label">Total Requests</div>
+              <div class="metric-value val-orange" id="lifetimeRequests">0</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">Total Pixel Fired</div>
+              <div class="metric-value val-purple" id="lifetimePixelFired">0</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">Total Links</div>
+              <div class="metric-value val-blue" id="lifetimeLinks">0</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">Total Approved</div>
+              <div class="metric-value val-green" id="lifetimeApproved">0</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CAMPAIGN / UTM ADS BREAKDOWN -->
+        <div class="table-container">
+          <div class="table-header">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <i class="fa-solid fa-bullhorn" style="color: #38bdf8;"></i>
+              <span>Meta Ads Campaign & UTM Tracking</span>
+            </div>
+            <a href="/api/admin/export-csv" class="btn btn-primary" style="padding: 5px 12px; font-size: 12px;">
+              <i class="fa-solid fa-download"></i> Export CSV
+            </a>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Ad Campaign / Source</th>
+                <th>Clicks</th>
+                <th>Real Telegram Leads</th>
+                <th>Pixel Hits Fired</th>
+                <th>Conversion Rate</th>
+              </tr>
+            </thead>
+            <tbody id="campaignBreakdownBody">
+              <tr>
+                <td colspan="5" style="text-align: center; color: #64748b;">No campaign traffic logged yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- HAR DIN KA HISAAB (DAILY BREAKDOWN) -->
+        <div class="table-container">
+          <div class="table-header">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <i class="fa-regular fa-calendar-days" style="color: #ef4444;"></i>
+              <span>Join Stats Per Day (Har Din Ka Hisaab)</span>
+            </div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Links Generated</th>
+                <th>Join Requests (Leads)</th>
+                <th>Pixel Hits (CAPI)</th>
+                <th>Approved Members</th>
+                <th>Accuracy Rate</th>
+              </tr>
+            </thead>
+            <tbody id="dailyBreakdownBody">
+              <tr>
+                <td colspan="6" style="text-align: center; color: #64748b;">No daily data yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- TAB 2: LIVE ACTIVITY FEED -->
+    <div id="tab-livefeed" class="tab-content">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3><i class="fa-solid fa-satellite-dish" style="color: #38bdf8;"></i> Real-Time Events Feed</h3>
+        <button class="btn btn-danger" style="font-size: 12px; padding: 6px 12px;" onclick="clearAllData()">
+          <i class="fa-solid fa-trash"></i> Reset All Data
+        </button>
+      </div>
+      <div class="live-feed-list" id="liveFeedList"></div>
+    </div>
+
+    <!-- TAB 3: SETUP (TELEGRAM & META CAPI) -->
+    <div id="tab-setup" class="tab-content">
+      <div class="settings-grid">
+        
+        <div class="settings-card">
+          <div class="card-title">
+            <i class="fa-brands fa-telegram" style="color: #229ED9; font-size: 20px;"></i>
+            <span>Telegram Bot & Channel Setup</span>
+          </div>
+          
+          <div class="form-group">
+            <label class="form-label">Telegram Bot Token</label>
+            <input type="password" id="inputBotToken" class="form-input" placeholder="e.g. 123456789:ABCdefGHIjklMNOpqrSTUvwxYZ">
+            <div class="form-hint">Create a bot on Telegram with @BotFather and paste the token here.</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Telegram Channel ID / Chat ID</label>
+            <input type="text" id="inputChatId" class="form-input" placeholder="e.g. -1001928374650 or @mychannel">
+            <div class="form-hint">Make your Bot an <strong>Admin</strong> in your Telegram Channel with permission to <i>"Invite Users via Links"</i> and <i>"Manage Chat"</i>.</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Auto-Approve Join Requests</label>
+            <select id="selectAutoApprove" class="form-select">
+              <option value="true">Yes — Automatically Approve Instantly</option>
+              <option value="false">No — Keep in Pending for Manual Review</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Public Domain URL (for Webhook)</label>
+            <input type="text" id="inputPublicUrl" class="form-input" placeholder="https://yourdomain.com">
+            <div class="form-hint">Your deployed HTTPS server URL where Telegram sends the <code>chat_join_request</code> webhook.</div>
+          </div>
+
+          <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button class="btn btn-primary" onclick="testBotConnection()">
+              <i class="fa-solid fa-plug"></i> Test Bot & Channel
+            </button>
+            <button class="btn btn-success" onclick="setupWebhook()">
+              <i class="fa-solid fa-link"></i> Set Webhook
+            </button>
+          </div>
+          <div id="botTestResult" style="margin-top: 12px; font-size: 13px;"></div>
+        </div>
+
+        <div class="settings-card">
+          <div class="card-title">
+            <i class="fa-brands fa-facebook" style="color: #1877F2; font-size: 20px;"></i>
+            <span>Meta Conversions API (CAPI) Setup</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Meta (Facebook) Pixel ID</label>
+            <input type="text" id="inputMetaPixelId" class="form-input" placeholder="e.g. 987654321012345">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Meta Conversions API Access Token</label>
+            <input type="password" id="inputMetaCapiToken" class="form-input" placeholder="EAAB... (Generated from Events Manager -> Settings)">
+            <div class="form-hint">In Meta Events Manager > Your Pixel > Settings > Conversions API > "Generate access token".</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Test Event Code (Optional for Live Debugging)</label>
+            <input type="text" id="inputTestEventCode" class="form-input" placeholder="e.g. TEST12345">
+            <div class="form-hint">Find this in Meta Events Manager > Test Events tab. Clear this once ads are live.</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Event Name to Fire</label>
+            <select id="selectMetaEventName" class="form-select">
+              <option value="Lead">Lead (Recommended)</option>
+              <option value="CompleteRegistration">CompleteRegistration</option>
+              <option value="Subscribe">Subscribe</option>
+            </select>
+          </div>
+
+          <div style="margin-top: 20px;">
+            <button class="btn btn-primary" onclick="testMetaCapi()">
+              <i class="fa-solid fa-paper-plane"></i> Send Test Event to Meta
+            </button>
+            <button class="btn btn-success" onclick="saveAllSettings()" style="margin-left: 10px;">
+              <i class="fa-solid fa-floppy-disk"></i> Save Settings
+            </button>
+          </div>
+          <div id="metaTestResult" style="margin-top: 12px; font-size: 13px;"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- TAB 4: LANDING PAGE DESIGNER -->
+    <div id="tab-customizer" class="tab-content">
+      <div style="display: grid; grid-template-columns: 1fr; gap: 24px;" class="settings-grid">
+        
+        <div class="settings-card">
+          <div class="card-title">
+            <i class="fa-solid fa-palette" style="color: #ec4899;"></i>
+            <span>Visual Theme & Conversion Presets</span>
+          </div>
+
+          <!-- Visual Theme Gallery with Image Previews -->
+          <div class="form-group">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
+              <label class="form-label" style="font-size:14px; color:#fff; font-weight:800; margin-bottom:0;">
+                <i class="fa-solid fa-wand-magic-sparkles" style="color:#ccff00;"></i> Visual Theme Gallery (Select by Image Preview)
+              </label>
+              <span style="font-size:11.5px; color:#94a3b8;">12 Ultra-Pro Designs</span>
+            </div>
+            
+            <div class="theme-cards-grid" id="themeGalleryGrid">
+              <!-- Cards rendered dynamically with image preview thumbnails -->
+            </div>
+          </div>
+
+          <div class="form-group" style="display: none;">
+            <select id="custTheme" class="form-select" onchange="onThemeSelectChange()">
+              <option value="tactical-lime">1. Tactical Cyber Radar (Sureshot By Ree Style - Lime Neon)</option>
+              <option value="ree-army">2. Dual Button VIP Radar (Ree Army Style - Pink & Gold)</option>
+              <option value="emerald-gold">3. Emerald Forest & Golden Sun (Jatin K Style)</option>
+              <option value="cyber-red">4. Cyberpunk Neon Red (Ashu Bamane Style)</option>
+              <option value="blue-grid">5. Electric Blue RGB Grid (Asla Bhai Style)</option>
+              <option value="purple-luxury">6. Purple Luxury Gradient (The Lal Bhai Style)</option>
+              <option value="clean-glass">7. Frosted Modern Glass (Alone Souvik Style)</option>
+              <option value="matrix-hacker">8. Matrix Terminal Green</option>
+              <option value="crypto-gold">9. Binance Gold VIP</option>
+              <option value="hyper-sunset">10. Miami Synthwave Sunset</option>
+              <option value="midnight-stealth">11. Stealth Carbon VIP</option>
+              <option value="fire-phoenix">12. Blazing Phoenix Fire</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Channel Display Name</label>
+            <input type="text" id="custTitle" class="form-input" placeholder="e.g. SURESHOT BY REE" oninput="updateLivePreview()">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Highlight Word (Color Accent in Name)</label>
+            <input type="text" id="custHighlight" class="form-input" placeholder="e.g. REE" oninput="updateLivePreview()">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Top Pill Badge Text</label>
+            <input type="text" id="custTopPill" class="form-input" placeholder="e.g. LIVE NOW" oninput="updateLivePreview()">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Dual Buttons Stack (Ree Army Style)</label>
+            <select id="custDualButtons" class="form-select" onchange="updateLivePreview()">
+              <option value="false">Single Primary Tactical Button</option>
+              <option value="true">Dual Button Stack (Pink + Golden)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Members Count</label>
+            <input type="text" id="custMembers" class="form-input" placeholder="e.g. 35,000+" oninput="updateLivePreview()">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Channel Description / Pitch</label>
+            <textarea id="custDesc" class="form-textarea" rows="2" oninput="updateLivePreview()"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Button Text</label>
+            <input type="text" id="custBtnText" class="form-input" placeholder="e.g. JOIN TELEGRAM" oninput="updateLivePreview()">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Branding Footer Text</label>
+            <input type="text" id="custBranding" class="form-input" placeholder="e.g. ASAD TECH 💀" oninput="updateLivePreview()">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Upload Channel Avatar Photo</label>
+            <input type="file" id="avatarFileInput" accept="image/*" class="form-input">
+            <button class="btn btn-primary" style="margin-top: 8px;" onclick="uploadAvatar()">
+              <i class="fa-solid fa-cloud-arrow-up"></i> Upload Photo
+            </button>
+          </div>
+
+          <button class="btn btn-success" style="width: 100%; margin-top: 14px; padding: 12px;" onclick="saveCustomizerSettings()">
+            <i class="fa-solid fa-check"></i> Save & Publish Changes
+          </button>
+        </div>
+
+        <div style="display: flex; flex-direction: column; align-items: center;">
+          <h4 style="margin-bottom: 12px; color: #94a3b8;"><i class="fa-solid fa-mobile-screen"></i> Live Mobile Preview</h4>
+          <iframe id="previewIframe" src="/" class="preview-frame"></iframe>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- TAB 5: 1-CLICK LEAD SIMULATOR -->
+    <div id="tab-simulator" class="tab-content">
+      <div class="settings-card" style="max-width: 700px; margin: 0 auto;">
+        <div class="card-title">
+          <i class="fa-solid fa-flask" style="color: #a855f7;"></i>
+          <span>0-Fake-Click Funnel Simulator</span>
+        </div>
+        <p style="color: #94a3b8; font-size: 13.5px; line-height: 1.6; margin-bottom: 20px;">
+          Test your complete funnel without spending a single rupee on Meta Ads!
+        </p>
+
+        <div class="form-group">
+          <label class="form-label">Simulated User Name</label>
+          <input type="text" id="simName" class="form-input" value="Vikram Malhotra">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Simulated Telegram Username</label>
+          <input type="text" id="simUsername" class="form-input" value="vikram_trader_vip">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Simulated Meta Campaign Name</label>
+          <input type="text" id="simCampaign" class="form-input" value="Meta_VIP_Trading_Set_1">
+        </div>
+
+        <button class="btn btn-lime" style="padding: 14px 28px; font-size: 15px; width: 100%;" onclick="runSimulation()">
+          <i class="fa-solid fa-rocket"></i> Simulate 1 Real Lead & CAPI Hit
+        </button>
+
+        <div id="simResult" style="margin-top: 16px; font-size: 14px;"></div>
+      </div>
+    </div>
+
+  </main>
+
+  <script src="/js/admin.js"></script>
+</body>
+</html>

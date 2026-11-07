@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="50%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#020617"/>
+    </linearGradient>
+    <linearGradient id="glow-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ef4444"/>
+      <stop offset="100%" stop-color="#f97316"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="400" fill="url(#bg-grad)"/>
+  <circle cx="200" cy="200" r="180" fill="none" stroke="url(#glow-grad)" stroke-width="4" opacity="0.6"/>
+  <!-- User Silhouette / Trader Mascot -->
+  <circle cx="200" cy="140" r="65" fill="#f1f5f9"/>
+  <path d="M90 320 C90 235, 140 220, 200 220 C260 220, 310 235, 310 320 Z" fill="#f1f5f9"/>
+  <circle cx="200" cy="140" r="55" fill="#cbd5e1"/>
+  <!-- Telegram airplane glow badge -->
+  <circle cx="290" cy="290" r="45" fill="#0284c7"/>
+  <path d="M268 288 L312 270 L298 312 L288 298 L284 306 L282 292 Z" fill="#ffffff"/>
+</svg>

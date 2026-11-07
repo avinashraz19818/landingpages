@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Telegram Channel</title>
+  <link rel="stylesheet" href="/css/landing.css">
+  
+  <!-- Meta Pixel Code Placeholder -->
+  <script>
+    !function(f,b,e,v,n,t,s)
+    {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+    n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+    if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+    n.queue=[];t=b.createElement(e);t.async=!0;
+    t.src=v;s=b.getElementsByTagName(e)[0];
+    s.parentNode.insertBefore(t,s)}(window, document,'script',
+    'https://connect.facebook.net/en_US/fbevents.js');
+  </script>
+</head>
+<body class="theme-tactical-lime">
+
+  <!-- Ambient background glow & grid -->
+  <div class="bg-ambient">
+    <div class="grid-overlay"></div>
+    <div class="glow-orb glow-orb-top"></div>
+  </div>
+
+  <div class="landing-wrapper">
+    <div class="landing-card" id="landingCard">
+      
+      <!-- Futuristic HUD Corner Brackets (Sureshot By Ree Style) -->
+      <div class="hud-corner hud-corner-tl" id="hudCornerTL"></div>
+      <div class="hud-corner hud-corner-br" id="hudCornerBR"></div>
+
+      <!-- Top Tag Badge -->
+      <div class="top-pill-badge" id="topPill">
+        <span class="pulse-dot"></span>
+        <span id="topPillText">LIVE NOW</span>
+      </div>
+
+      <!-- Avatar with Radar Crosshair & Countdown Badge -->
+      <div class="avatar-container">
+        
+        <!-- Crosshair Radar (Sureshot By Ree style) -->
+        <div class="tactical-crosshair" id="tacticalCrosshair">
+          <div class="crosshair-tick tick-n"></div>
+          <div class="crosshair-tick tick-s"></div>
+          <div class="crosshair-tick tick-w"></div>
+          <div class="crosshair-tick tick-e"></div>
+          <div class="crosshair-dashed-ring"></div>
+        </div>
+
+        <!-- Orbiting Dotted Radar (Ree Army style) -->
+        <div class="orbit-radar-dots" id="orbitRadar" style="display: none;"></div>
+
+        <!-- Live Circle Countdown Badge on corner of avatar (Ree Army style) -->
+        <div class="circle-countdown-badge" id="circleCountdownBadge">58</div>
+
+        <!-- Profile Avatar Image -->
+        <img src="/uploads/default-avatar.svg" alt="Avatar" class="avatar-img" id="avatarImg">
+        
+        <!-- Verified Checkmark Badge -->
+        <div class="verified-badge verified-green" id="verifiedBadge">
+          <svg viewBox="0 0 24 24">
+            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Channel Name & Verified Icon Row -->
+      <div class="channel-title-row">
+        <h1 class="channel-title" id="channelTitle">
+          SURESHOT BY <span class="title-highlight">REE</span>
+        </h1>
+        <div class="title-verified-icon" id="titleVerifiedIcon">
+          <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+        </div>
+      </div>
+
+      <!-- Channel Subtitle -->
+      <div class="channel-subtitle" id="channelSubtitle">
+        Official Telegram Channel
+      </div>
+
+      <!-- Members & Tag Stat Row -->
+      <div class="members-stat-row" id="membersStatRow">
+        <div class="stat-dot-item">
+          <span class="dot-green"></span>
+          <span id="membersText">35,000+ Members</span>
+        </div>
+        <div class="stat-dot-item">
+          <span class="dot-cyan"></span>
+          <span id="freeText">100% Free</span>
+        </div>
+      </div>
+
+      <!-- Description / Pitch -->
+      <p class="channel-desc" id="channelDesc">
+        Free Daily Tips & Strategies • Join the Fastest-Growing Community
+      </p>
+
+      <!-- Auto-Redirect Countdown Box -->
+      <div class="countdown-box" id="countdownBox">
+        <div class="countdown-info">
+          <span id="countdownLabel">Telegram khul raha hai 2s mein...</span>
+        </div>
+        <button class="btn-pause-timer" id="btnPauseTimer" type="button">Ruko / Pause</button>
+      </div>
+
+      <!-- Tactical Primary CTA Button (Sureshot By Ree Style) -->
+      <div class="cta-button-container" id="tacticalBtnWrapper">
+        <a href="javascript:void(0)" class="btn-tactical-join" id="btnJoinTelegram">
+          <div class="btn-tg-circle-icon">
+            <svg viewBox="0 0 24 24">
+              <path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/>
+            </svg>
+          </div>
+          <div class="btn-text-content">
+            <span class="btn-text-main" id="btnText">JOIN TELEGRAM</span>
+            <span class="btn-text-sub" id="btnSubtext">Tap to open the channel</span>
+          </div>
+          <div class="btn-arrow-icon">
+            <svg viewBox="0 0 24 24">
+              <path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            </svg>
+          </div>
+        </a>
+      </div>
+
+      <!-- DUAL BUTTON STACK (Ree Army Style - Optional via toggle) -->
+      <div class="dual-buttons-wrapper" id="dualButtonsWrapper" style="display: none;">
+        <a href="javascript:void(0)" class="btn-dual btn-dual-pink" id="btnDualPink">
+          <svg style="width:20px;height:20px;fill:#fff;" viewBox="0 0 24 24"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg>
+          <span id="dualBtn1Text">Join Telegram Now</span>
+        </a>
+        <a href="javascript:void(0)" class="btn-dual btn-dual-orange" id="btnDualOrange">
+          <svg style="width:20px;height:20px;fill:#fff;" viewBox="0 0 24 24"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg>
+          <span id="dualBtn2Text">Join Telegram Now</span>
+        </a>
+      </div>
+
+      <!-- 3-Box Stat Tiles (Sureshot By Ree Style) -->
+      <div class="stats-boxes-grid" id="statsBoxesGrid">
+        <div class="stat-box-card">
+          <div class="stat-box-top" id="stat1Top">100%</div>
+          <div class="stat-box-bottom" id="stat1Bottom">FREE</div>
+        </div>
+        <div class="stat-box-card">
+          <div class="stat-box-top" id="stat2Top">Instant</div>
+          <div class="stat-box-bottom" id="stat2Bottom">ACCESS</div>
+        </div>
+        <div class="stat-box-card">
+          <div class="stat-box-top" id="stat3Top">Daily</div>
+          <div class="stat-box-bottom" id="stat3Bottom">UPDATES</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Branding & Disclaimer -->
+    <div style="margin-top: 20px; text-align: center;">
+      <div class="branding-pill" id="brandingPill">
+        Ads managed by <span id="brandingText">ASAD TECH 💀</span>
+      </div>
+      <div class="footer-disclaimer">
+        Disclaimer: Content shared on this channel is for informational purposes only. Please do your own research before making any decisions based on it.
+      </div>
+    </div>
+
+  </div>
+
+  <script src="/js/landing.js"></script>
+</body>
+</html>
