@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const previewDir = path.join(__dirname, '..', 'public', 'previews');
+const previewDir = path.join(__dirname, 'public', 'previews');
 if (!fs.existsSync(previewDir)) fs.mkdirSync(previewDir, { recursive: true });
 
 const themes = [

@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 300" width="240" height="300">
+  <defs>
+    <linearGradient id="grad-sunset" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ec4899" />
+      <stop offset="100%" stop-color="#f97316" />
+    </linearGradient>
+    <linearGradient id="grad-fire" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff4500" />
+      <stop offset="100%" stop-color="#ff8c00" />
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="240" height="300" fill="#0b0b0b"/>
+  <!-- Card Container -->
+  <rect x="10" y="10" width="220" height="280" rx="20" fill="#141414" stroke="rgba(255,255,255,0.06)" stroke-width="1.5"/>
+  
+  <!-- Top Badge -->
+  <rect x="75" y="22" width="90" height="18" rx="9" fill="rgba(0,0,0,0.3)" stroke="#f3ba2f" stroke-width="1"/>
+  <circle cx="85" cy="31" r="3" fill="#f3ba2f"/>
+  <text x="122" y="34" fill="#ffffff" font-size="8.5" font-weight="800" text-anchor="middle" font-family="sans-serif">LIVE CHANNEL</text>
+  <!-- Avatar Area -->
+  <circle cx="120" cy="90" r="40" fill="none" stroke="#f3ba2f" stroke-width="2" opacity="0.8"/>
+  <circle cx="120" cy="90" r="34" fill="#2d3748"/>
+  <circle cx="120" cy="80" r="14" fill="#cbd5e1"/>
+  <path d="M96 118 C96 102, 107 98, 120 98 C133 98, 144 102, 144 118 Z" fill="#cbd5e1"/>
+  <!-- Verified Badge -->
+  <circle cx="146" cy="114" r="8" fill="#10b981"/>
+  <path d="M143 114 L145 116 L149 112" stroke="#fff" stroke-width="1.5" fill="none"/>
+  
+  <!-- Title & Sub -->
+  <text x="120" y="148" fill="#ffffff" font-size="14" font-weight="900" text-anchor="middle" font-family="sans-serif">Binance <tspan fill="#f3ba2f">Gold</tspan></text>
+  <text x="120" y="165" fill="#94a3b8" font-size="9" text-anchor="middle" font-family="sans-serif">35,000+ Members • 100% Free</text>
+  <text x="120" y="180" fill="#94a3b8" font-size="8.5" text-anchor="middle" font-family="sans-serif">Daily Signals &amp; Market Mentorship</text>
+  <!-- Button(s) -->
+  
+      <rect x="25" y="200" width="190" height="36" rx="18" fill="#f3ba2f" />
+      <circle cx="45" cy="218" r="10" fill="#000" opacity="0.3"/>
+      <text x="125" y="223" fill="#000" font-size="12" font-weight="bold" text-anchor="middle" font-family="sans-serif">JOIN TELEGRAM</text>
+    
+  <!-- Bottom mini stats -->
+  <rect x="25" y="260" width="58" height="18" rx="4" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.05)"/>
+  <text x="54" y="272" fill="#ffffff" font-size="8" font-weight="bold" text-anchor="middle" font-family="sans-serif">100% FREE</text>
+  <rect x="91" y="260" width="58" height="18" rx="4" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.05)"/>
+  <text x="120" y="272" fill="#ffffff" font-size="8" font-weight="bold" text-anchor="middle" font-family="sans-serif">INSTANT</text>
+  <rect x="157" y="260" width="58" height="18" rx="4" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.05)"/>
+  <text x="186" y="272" fill="#ffffff" font-size="8" font-weight="bold" text-anchor="middle" font-family="sans-serif">DAILY</text>
+</svg>
