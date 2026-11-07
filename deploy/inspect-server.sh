@@ -109,13 +109,15 @@ if command -v nginx >/dev/null 2>&1; then
 
   echo ""
   echo "   🔍 KAUN SE DOMAINS SERVE HO RAHE HAIN:"
-  grep -rhE '^[[:space:]]*server_name' /etc/nginx/sites-enabled/ /etc/nginx/conf.d/ 2>/dev/null \
+  echo "      (note: -R use ho raha hai kyunki sites-enabled/ me sirf symlinks hote hain;"
+  echo "       grep -r unhe follow nahi karta aur khaali result deta hai)"
+  grep -RhE '^[[:space:]]*server_name' /etc/nginx/sites-enabled/ /etc/nginx/conf.d/ 2>/dev/null \
     | sed 's/^[[:space:]]*server_name[[:space:]]*//; s/;.*$//' \
     | tr ' ' '\n' | grep -v '^$' | sort -u | sed 's/^/     • /'
 
   echo ""
   echo "   ⚠ 'default_server' kaha set hai (ye hatana DANGEROUS ho sakta hai):"
-  grep -rn "default_server" /etc/nginx/sites-enabled/ /etc/nginx/conf.d/ /etc/nginx/nginx.conf 2>/dev/null \
+  grep -Rn "default_server" /etc/nginx/sites-enabled/ /etc/nginx/conf.d/ /etc/nginx/nginx.conf 2>/dev/null \
     | sed 's/^/     /' || echo "     (kahin nahi mila)"
 
   echo ""
@@ -159,7 +161,7 @@ if [ -d /etc/letsencrypt/live ] && ls /etc/letsencrypt/live >/dev/null 2>&1; the
 fi
 echo ""
 echo "   Nginx ke SSL cert paths:"
-grep -rhoE "ssl_certificate[[:space:]]+[^;]+" /etc/nginx/sites-enabled/ /etc/nginx/conf.d/ 2>/dev/null \
+grep -RhoE "ssl_certificate[[:space:]]+[^;]+" /etc/nginx/sites-enabled/ /etc/nginx/conf.d/ 2>/dev/null \
   | sed 's/^/     /' | sort -u || echo "     (koi nahi)"
 
 # ---------------------------------------------------------------------
