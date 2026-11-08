@@ -681,6 +681,70 @@ async function logout() {
   showLoginOverlay();
 }
 
+/** Show/hide the "you are still on the default password" banner in the Setup tab. */
+function syncDefaultPasswordWarning(usingDefault) {
+  const banner = document.getElementById('defaultPasswordBanner');
+  if (banner) banner.style.display = usingDefault ? 'block' : 'none';
+
+  const card = document.getElementById('passwordCard');
+  if (card) {
+    card.style.borderColor = usingDefault ? 'rgba(239,68,68,.45)' : '#1a2436';
+  }
+}
+
+async function changePassword() {
+  const resDiv = document.getElementById('pwResult');
+  const current = document.getElementById('pwCurrent').value;
+  const next = document.getElementById('pwNew').value;
+  const confirmPw = document.getElementById('pwConfirm').value;
+
+  resDiv.innerHTML = '';
+
+  if (!current) {
+    resDiv.innerHTML = '<span style="color:#ef4444;">✗ Current password likho.</span>';
+    return;
+  }
+  if (next.length < 8) {
+    resDiv.innerHTML = '<span style="color:#ef4444;">✗ Naya password kam se kam 8 character ka hona chahiye.</span>';
+    return;
+  }
+  if (next !== confirmPw) {
+    resDiv.innerHTML = '<span style="color:#ef4444;">✗ Dono naye password aapas me match nahi kar rahe.</span>';
+    return;
+  }
+  if (next === current) {
+    resDiv.innerHTML = '<span style="color:#ef4444;">✗ Naya password purane se alag hona chahiye.</span>';
+    return;
+  }
+
+  resDiv.innerHTML = '<span style="color:#38bdf8;"><i class="fa-solid fa-spinner fa-spin"></i> Password badal rahe hain...</span>';
+
+  try {
+    const res = await nativeFetch('/api/admin/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword: current, newPassword: next })
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      resDiv.innerHTML = '<span style="color:#22c55e;">✓ Password badal gaya! Ab dobara login karo.</span>';
+      document.getElementById('pwCurrent').value = '';
+      document.getElementById('pwNew').value = '';
+      document.getElementById('pwConfirm').value = '';
+
+      // The server rotated the session secret, so this session is already dead.
+      // Give them a moment to read the message, then bounce to the login screen.
+      dashboardBooted = false;
+      setTimeout(() => showLoginOverlay('Password badal gaya ✓ Ab naye password se login karo.'), 1800);
+    } else {
+      resDiv.innerHTML = `<span style="color:#ef4444;">✗ ${data.error || 'Password change fail hua.'}</span>`;
+    }
+  } catch (e) {
+    resDiv.innerHTML = `<span style="color:#ef4444;">✗ Request fail: ${e.message}</span>`;
+  }
+}
+
 /** Boot the dashboard only once per session. */
 function bootDashboard() {
   if (dashboardBooted) return;
@@ -695,8 +759,10 @@ async function checkAuthAndBoot() {
     const res = await nativeFetch('/api/admin/status');
     const data = await res.json();
 
+    // Warn in BOTH places: the login screen, and the Setup tab once inside.
     const warn = document.getElementById('loginDefaultWarning');
-    if (warn && data.usingDefaultPassword) warn.style.display = 'block';
+    if (warn) warn.style.display = data.usingDefaultPassword ? 'block' : 'none';
+    syncDefaultPasswordWarning(data.usingDefaultPassword);
 
     if (data.authenticated) {
       hideLoginOverlay();

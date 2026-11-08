@@ -52,7 +52,8 @@
     "adminPassword": "admin",
     "publicUrl": "https://yourdomain.com",
     "sessionSecret": "",
-    "telegramWebhookSecret": ""
+    "telegramWebhookSecret": "",
+    "adminPasswordChanged": false
   },
   "sessions": {},
   "events": []

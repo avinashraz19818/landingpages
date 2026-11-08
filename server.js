@@ -399,8 +399,12 @@ function sanitizeSettings(settings) {
     },
     adminPassword: {
       set: Boolean(settings.adminPassword),
-      // Warn loudly while the shipped default is still in use
-      isDefault: settings.adminPassword === 'admin'
+      // Warn loudly while the shipped default is still in use. Driven by an
+      // explicit flag, NOT by comparing adminPassword to 'admin' — the first
+      // login upgrades the plaintext default to a scrypt hash, which would
+      // otherwise silently clear this warning while the password was still
+      // effectively 'admin'.
+      isDefault: settings.adminPasswordChanged !== true
     }
   };
 
@@ -493,7 +497,9 @@ app.get('/api/admin/status', (req, res) => {
   res.json({
     success: true,
     authenticated: auth.verifySessionToken(token, settings.sessionSecret),
-    usingDefaultPassword: settings.adminPassword === 'admin',
+    // Explicit flag — see sanitizeSettings() for why this is not a string
+    // comparison against 'admin'.
+    usingDefaultPassword: settings.adminPasswordChanged !== true,
     webhookSecretSet: Boolean(settings.telegramWebhookSecret),
     telegramBotTokenSet: Boolean(settings.telegramBotToken),
     metaCapiTokenSet: Boolean(settings.metaCapiToken)
@@ -520,8 +526,10 @@ app.post('/api/admin/change-password', (req, res) => {
 
   db.updateSettings({
     adminPassword: auth.hashPassword(next),
-    // Rotating the signing key instantly logs out every existing session,
-    // including any that an attacker may already hold.
+    // Record that the operator has moved off the shipped default, so the
+    // dashboard stops nagging. Also rotate the signing key, which instantly
+    // logs out every existing session including any an attacker may hold.
+    adminPasswordChanged: true,
     sessionSecret: auth.generateSecret(32)
   });
 

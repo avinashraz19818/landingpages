@@ -74,6 +74,12 @@ const defaultData = {
     
     // System
     adminPassword: 'admin',
+    // Flips to true only when the admin actually changes their password via
+    // /api/admin/change-password. We cannot infer this from adminPassword
+    // itself: the plaintext default is transparently upgraded to a scrypt
+    // hash on first login, so comparing against 'admin' would start
+    // reporting "not default" while the password is still effectively admin.
+    adminPasswordChanged: false,
     publicUrl: 'http://localhost:3000',
 
     // --- Security (auto-generated on first boot, never expose publicly) ---

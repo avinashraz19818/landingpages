@@ -797,8 +797,59 @@
 
     <!-- TAB 3: SETUP (TELEGRAM & META CAPI) -->
     <div id="tab-setup" class="tab-content">
+
+      <!-- ============ ADMIN PASSWORD (sabse upar, sabse zaroori) ============ -->
+      <div class="settings-card" id="passwordCard" style="margin-bottom: 22px; border-color: rgba(239,68,68,.45);">
+        <div class="card-title">
+          <i class="fa-solid fa-key" style="color: #ef4444; font-size: 20px;"></i>
+          <span>Admin Password Badlo</span>
+        </div>
+
+        <div id="defaultPasswordBanner" style="display:none; background: rgba(239,68,68,.13);
+             border: 1px solid rgba(239,68,68,.45); border-radius: 10px; padding: 13px 15px;
+             color: #fca5a5; font-size: 13.5px; line-height: 1.6; margin-bottom: 18px;">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <strong>Default password <code style="color:#fecaca">admin</code> abhi bhi laga hua hai!</strong><br>
+          Internet pe koi bhi aapka Telegram bot token aur Meta CAPI token chura sakta hai,
+          aur aapka pura lead data delete kar sakta hai. <strong>Neeche se abhi badlo.</strong>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px;">
+          <div class="form-group">
+            <label class="form-label">Current Password</label>
+            <input type="password" id="pwCurrent" class="form-input" autocomplete="current-password"
+                   placeholder="Abhi wala password">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">New Password</label>
+            <input type="password" id="pwNew" class="form-input" autocomplete="new-password"
+                   placeholder="Kam se kam 8 character">
+            <div class="form-hint">Minimum 8 character. Badalne ke baad sabhi sessions logout ho jaayenge.</div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">New Password (dobara)</label>
+            <input type="password" id="pwConfirm" class="form-input" autocomplete="new-password"
+                   placeholder="Confirm karne ke liye dobara likho">
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 8px;">
+          <button class="btn btn-lime" style="padding: 12px 26px;" onclick="changePassword()">
+            <i class="fa-solid fa-shield-halved"></i> Password Badlo
+          </button>
+          <span style="color: #64748b; font-size: 12.5px;">
+            <i class="fa-solid fa-circle-info"></i>
+            Password badalne ke baad dobara login karna padega.
+          </span>
+        </div>
+
+        <div id="pwResult" style="margin-top: 14px; font-size: 14px;"></div>
+      </div>
+
       <div class="settings-grid">
-        
+
         <div class="settings-card">
           <div class="card-title">
             <i class="fa-brands fa-telegram" style="color: #229ED9; font-size: 20px;"></i>
